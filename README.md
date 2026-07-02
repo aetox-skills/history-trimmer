@@ -1,5 +1,7 @@
 # History Trimmer
 
+> **v4 — 2 Jul 2026**: critical bug fix (splice in-place mutation), runtime type safety, tool pair integrity always validated, 20 unit tests
+
 **Every API call to an LLM carries your entire conversation history — including messages from 50 exchanges ago. You pay for every one of those tokens. Most of them are irrelevant to what you're asking right now.**
 
 This is not an OpenCode problem. This is not a Claude Code problem. This is not a Codex problem. **This is how every API-based LLM works** — the full history goes with every request. The bigger the model, the more expensive the waste.
@@ -93,11 +95,20 @@ This plugin is optimized for that principle: **keep just enough context for the 
 "experimental.chat.messages.transform" → filters messages array before API call
 ```
 
-- **System messages** (instructions, context) — always kept
+3-step pipeline:
+
+1. **User-priority capped trim** — keeps up to 5 most recent user messages, hard cap at 10 total. Walks from the end of history, counting user messages. Drops everything before the cut point.
+
+2. **Tool call/result pair integrity** — always runs (even on sessions under HARD_CAP). Matches tool calls to results by `toolCallId` (OpenCode runtime format), with fallback support for `callID` (SDK format) and `tool_call_id`/`tool_use_id` (legacy provider format). Orphaned pairs are removed — no broken tool chains sent to the LLM.
+
+3. **In-place mutation via `splice`** — reassigning `output.messages` is a silent no-op in OpenCode (see [issue #25754](https://github.com/anomalyco/opencode/issues/25754)). The plugin mutates the array in place to ensure changes take effect.
+
 - **User messages** — keeps up to 5 most recent (your questions are the conversation)
-- **Assistant + tool messages** — kept alongside their user message, but trimmed first if total exceeds cap
-- **Tool call/result integrity** — ensures no pair gets split. If a tool_call is kept, its tool_result is included. Orphaned tool_results at the cut boundary are removed, preventing API errors.
+- **Assistant messages** — kept alongside their user message, trimmed first if total exceeds cap
+- **Tool calls/results** — paired by ID, orphaned parts cleaned up regardless of session length
 - The rest are discarded before the HTTPS request to the LLM provider
+
+> **Note on runtime format:** The `experimental.chat.messages.transform` hook uses OpenCode's internal message format (from `message.ts`), NOT the SDK `Part` types. Tool calls/results are `ToolInvocationPart` (type `"tool-invocation"`) paired by `toolInvocation.toolCallId`. The plugin handles this format natively while maintaining backward compatibility with SDK and provider field names.
 
 ---
 
@@ -117,12 +128,29 @@ export HISTORY_KEEP=15     # Raise hard cap for deep agentic sessions
 
 ---
 
+## Testing
+
+```bash
+npx tsx --test history-trimmer.test.ts
+```
+
+**20 tests across 7 suites** covering:
+- Basic trimming (cap enforcement, recency)
+- User-priority trimming (MAX_USER, HARD_CAP interaction)
+- Boundary conditions (HARD_CAP < MAX_USER, consecutive user messages)
+- Tool pair integrity (matched pairs preserved, orphaned calls/results removed, empty message cleanup)
+- Edge cases (no parts, undefined parts, all-assistant sessions, single message)
+- Multi-format compatibility (SDK `callID`, legacy `tool_call_id`/`tool_use_id`)
+- In-place mutation behavior (splice vs reassignment)
+
+---
+
 ## Compatibility
 
 - OpenCode v1.16+
 - Uses `experimental.chat.messages.transform` hook
-- Works with any LLM provider (no provider-specific behavior)
-- Zero dependencies — one TypeScript file
+- Handles OpenCode runtime format (`ToolInvocationPart`) + SDK format (`ToolPart`) + legacy provider format
+- Zero dependencies — one TypeScript file + one test file
 
 ---
 
