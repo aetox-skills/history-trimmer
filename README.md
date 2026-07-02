@@ -44,7 +44,7 @@ $env:HISTORY_KEEP = "10"
 
 | Default | Description |
 |:-------:|:------------|
-| `6` | ~2 exchanges (user + assistant + tool results) |
+| `3` | current exchange + 1 previous (light context — use skills/docs for long-term memory) |
 
 ## Compatibility
 

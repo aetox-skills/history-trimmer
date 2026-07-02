@@ -2,9 +2,9 @@ import type { Plugin } from "@opencode-ai/plugin"
 
 export const HistoryTrimmerPlugin: Plugin = async () => {
   // Number of recent non-system messages to keep per call
-  // Default 6 ≈ 2 exchanges (user + assistant + tool results)
-  // Override via env: HISTORY_KEEP=10
-  const KEEP = parseInt(process.env.HISTORY_KEEP ?? "6", 10)
+  // Default 3 ≈ current exchange + 1 previous (history is not primary memory)
+  // Override via env: HISTORY_KEEP=6
+  const KEEP = parseInt(process.env.HISTORY_KEEP ?? "3", 10)
 
   return {
     "experimental.chat.messages.transform": async (_input, output) => {
