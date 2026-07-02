@@ -193,7 +193,7 @@ tool_ratio = tool_calls_in_window / total_messages_in_window
 
 > **หมายเหตุทุก preset:** `MAX_TOOL_MSGS` ควบคุม tool evidence 2 รูปแบบพร้อมกัน — legacy `role="tool"` และคู่ tool invocation (call+result) ใน `assistant.parts` สำหรับ OpenCode runtime format
 
-#### A) Chat / Research (tool-light)
+#### A) Chat / Research (tool-light) — ได้กับทุกโมเดล
 
 ```env
 PRESERVE_FIRST_MSGS=2
@@ -251,6 +251,25 @@ MAX_TOTAL_MSGS=44
 เหมาะกับ: งานทั่วไป, coding, debug
 **นี่คือ preset ที่ active อยู่ตอนนี้ (v8)**
 เหตุผล: 10/14/14/8/44 = sum(40) + buffer(4) — MAX_TOTAL เป็น safety fence ไม่ใช่ active constraint per-role caps ทำหน้าที่ตัดแทน
+
+---
+
+### ⚡ Model-Adaptive Preset Selector
+
+**ปัญหา:** Preset A/B/C/D ให้ค่า fixed—แต่ cache economics ของแต่ละโมเดลไม่เท่ากัน
+- **DeepSeek V4 Flash:** miss/hit = **50×** → ควร aggressive (เหมือน A/D)
+- **DeepSeek V4 Pro:** miss/hit = **120×** → ให้เก็บ tool evidence มากกว่า (เหมือน C)
+
+**วิธีแก้:** ใช้ `MODEL_ADAPTIVE.md` — สูตร `factor = clamp(R/120, 0.5, 1.5)` ที่ปรับ config อัตโนมัติตาม breakeven ratio ของโมเดล
+
+**กฎคร่าวๆ:**
+| R | ตัวอย่างโมเดล | แนวโน้ม | Preset ใกล้เคียง |
+|:-:|:--|:--|:--|
+| 50× | Flash | aggressive | D (v8) |
+| 120× | Pro | balanced | C (tool-heavy) |
+| 30× | GPT-4o mini | very aggressive | A (lean) |
+
+ดูเต็มๆ ได้ที่ [`MODEL_ADAPTIVE.md`](MODEL_ADAPTIVE.md)
 
 ---
 
