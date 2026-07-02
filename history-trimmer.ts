@@ -252,10 +252,10 @@ export function trimMessages(
 
 export const HistoryTrimmerPlugin: Plugin = async () => {
   const MAX_USER = intEnv("MAX_USER_MSGS", 10, 1)
-  const MAX_ASSISTANT = intEnv("MAX_ASSISTANT_MSGS", 16, 1)
-  const MAX_TOOL = intEnv("MAX_TOOL_MSGS", 16, 1)
+  const MAX_ASSISTANT = intEnv("MAX_ASSISTANT_MSGS", 14, 1)
+  const MAX_TOOL = intEnv("MAX_TOOL_MSGS", 14, 1)
   const MIN_TOTAL = intEnv("MIN_TOTAL_MSGS", 8, 2)
-  const MAX_TOTAL = intEnv("MAX_TOTAL_MSGS", 50, 5)
+  const MAX_TOTAL = intEnv("MAX_TOTAL_MSGS", 44, 5)
   const PRESERVE_FIRST = intEnv("PRESERVE_FIRST_MSGS", 2, 0)
 
   return {
