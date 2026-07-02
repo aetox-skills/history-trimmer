@@ -1,5 +1,8 @@
 # History Trimmer
 
+> **v7 — 3 ก.ค. 2026**: ปรับ defaults ใหม่จูนมาแล้ว 2/8/16/7/8/35  
+> จาก ประสบการณ์ใช้งานจริง: `PRESERVE_FIRST_MSGS=2` กัน system prompt + ข้อความแรกไว้, `MAX_USER=8` `MAX_ASSISTANT=16` `MAX_TOTAL=35` — สมดุลระหว่าง context เพียงพอกับ 4-5 รอบถาม-ตอบ กับไม่ให้บวมเกินจำเป็น  
+>  
 > **v6 — 2 ก.ค. 2026**: per-role caps + preserveFirst + MAX_TOTAL safety ceiling + **cache economics**  
 > v6 ชนะ v4 ไม่ใช่แค่เรื่อง token savings แต่เพราะ **cache hit rate สูงกว่า** — การตัดแบบคงที่น้อยครั้งกว่า ทำให้ prompt prefix มีเสถียรภาพ → cache hits มากขึ้น → ต้นทุนรวมต่ำกว่า ดูหัวข้อ [v4 vs v6](#v4-vs-v6-ทำไม-per-role-caps-ถึงถูกกว่าสำหรับ-llm-ที่มี-cache)  
 > เพิ่ม `preserveFirst` — กัน N ข้อความแรกไว้ไม่ถูกตัด, 32 tests
@@ -259,21 +262,22 @@ v6 แก้ด้วย **per-role caps + MAX_TOTAL**:
 
 | ตัวแปร | ค่าเริ่มต้น | คำอธิบาย |
 |:---------|:-------:|:------------|
-| `MAX_USER_MSGS` | `5` | จำนวน user message สูงสุดที่จะเก็บ |
-| `MAX_ASSISTANT_MSGS` | `10` | จำนวน assistant message สูงสุดที่จะเก็บ |
+| `MAX_USER_MSGS` | `8` | จำนวน user message สูงสุดที่จะเก็บ (พอสำหรับ ~4 รอบถาม-ตอบ) |
+| `MAX_ASSISTANT_MSGS` | `16` | จำนวน assistant message สูงสุดที่จะเก็บ |
 | `MAX_TOOL_MSGS` | `7` | จำนวน tool message สูงสุดที่จะเก็บ (ใช้ได้เมื่อ runtime มี role `"tool"` ใน message level — OpenCode internal format เก็บ tool calls/results เป็น `ToolInvocationPart` ภายใน assistant message, ดังนั้น tool calls/results จะถูกควบคุมโดย `MAX_ASSISTANT_MSGS` + pair cleanup logic ไม่ใช่ `MAX_TOOL_MSGS` โดยตรง) |
-| `MIN_TOTAL_MSGS` | `5` | ไม่ตัดถ้าจำนวนข้อความทั้งหมด ≤ ค่านี้ (ประหยัด CPU สำหรับ session สั้น) |
-| `MAX_TOTAL_MSGS` | `30` | เพดานแข็งของ messages **ในส่วนที่ถูกตัด** (rest portion)— ไม่รวมข้อความที่ preserveFirst กันไว้ ตัวอย่าง: `PRESERVE_FIRST_MSGS=20, MAX_TOTAL=30` → รวมสูงสุด 50 ข้อความ (20 + 30) |
-| `PRESERVE_FIRST_MSGS` | `0` | กัน N ข้อความแรกไว้ **ไม่ถูกตัด** — ใช้สำหรับ system/intro messages ที่อยากให้อยู่ตลอด (ค่าเริ่มต้น 0 = ปิด) |
+| `MIN_TOTAL_MSGS` | `8` | ไม่ตัดถ้าจำนวนข้อความทั้งหมด ≤ ค่านี้ (ประหยัด CPU สำหรับ session สั้น) |
+| `MAX_TOTAL_MSGS` | `35` | เพดานแข็งของ messages **ในส่วนที่ถูกตัด** (rest portion)— ไม่รวมข้อความที่ preserveFirst กันไว้ ตัวอย่าง: `PRESERVE_FIRST_MSGS=20, MAX_TOTAL=35` → รวมสูงสุด 55 ข้อความ (20 + 35) |
+| `PRESERVE_FIRST_MSGS` | `2` | กัน N ข้อความแรกไว้ **ไม่ถูกตัด** — ใช้สำหรับ system/intro messages ที่อยากให้อยู่ตลอด (ค่าเริ่มต้น 2 = กันข้อความเปิด会话) |
 
 ```bash
-export MAX_USER_MSGS=3      # เก็บแค่ 3 คำถามล่าสุด — ประหยัดสูงสุด
-export MAX_ASSISTANT_MSGS=6 # 6 คำตอบล่าสุดพอสำหรับ agentic work
-export MAX_TOOL_MSGS=5      # tool interaction 5 อันล่าสุด
-export MAX_TOTAL_MSGS=20    # safety ceiling
+export MAX_USER_MSGS=8      # 8 คำถามล่าสุด — สำหรับ 4-5 รอบถาม-ตอบ
+export MAX_ASSISTANT_MSGS=16 # 16 คำตอบ
+export MAX_TOOL_MSGS=7       # tool interaction 7 อันล่าสุด
+export PRESERVE_FIRST_MSGS=2 # กัน system prompt + ข้อความแรก
+export MAX_TOTAL_MSGS=35     # safety ceiling
 ```
 
-**ค่าเริ่มต้น (5U + 10A + 7T = 22):** เลือกมาให้ balance ระหว่าง context ที่เพียงพอกับการทำงานส่วนใหญ่ กับ token savings ที่ ~90% เทียบกับ session 50 ครั้งที่ไม่ถูกจำกัด
+**ค่าเริ่มต้น (P2 + 8U + 16A + 7T = 33 รวม MAX_TOTAL=35):** จูนจากการใช้งานจริงบน DeepSeek V4 Pro — `PRESERVE_FIRST=2` กัน system prompt + first user message ไว้ไม่ถูกแตะ, per-role caps 8U/16A/7T พอให้ context ย้อนกลับ ~4-5 รอบถาม-ตอบ tool-intensive ได้, MAX_TOTAL=35 เป็น safety ceiling เผื่อ tool message บวม สมดุลระหว่าง cache stability (~85% hit rate) กับ context coverage
 
 ---
 

@@ -251,12 +251,12 @@ export function trimMessages(
 // ── Plugin ──
 
 export const HistoryTrimmerPlugin: Plugin = async () => {
-  const MAX_USER = intEnv("MAX_USER_MSGS", 5, 1)
-  const MAX_ASSISTANT = intEnv("MAX_ASSISTANT_MSGS", 10, 1)
+  const MAX_USER = intEnv("MAX_USER_MSGS", 8, 1)
+  const MAX_ASSISTANT = intEnv("MAX_ASSISTANT_MSGS", 16, 1)
   const MAX_TOOL = intEnv("MAX_TOOL_MSGS", 7, 1)
-  const MIN_TOTAL = intEnv("MIN_TOTAL_MSGS", 5, 2)
-  const MAX_TOTAL = intEnv("MAX_TOTAL_MSGS", 30, 5)
-  const PRESERVE_FIRST = intEnv("PRESERVE_FIRST_MSGS", 0, 0)
+  const MIN_TOTAL = intEnv("MIN_TOTAL_MSGS", 8, 2)
+  const MAX_TOTAL = intEnv("MAX_TOTAL_MSGS", 35, 5)
+  const PRESERVE_FIRST = intEnv("PRESERVE_FIRST_MSGS", 2, 0)
 
   return {
     "experimental.chat.messages.transform": async (_input, output) => {

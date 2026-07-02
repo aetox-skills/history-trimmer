@@ -7,7 +7,7 @@ import assert from "node:assert"
 import { trimMessages, type RuntimeMessage, type RuntimePart } from "./history-trimmer"
 
 // ── Default test params (mirror production defaults) ──
-const DP = { MAX_USER: 5, MAX_ASST: 10, MAX_TOOL: 7, MIN_TOTAL: 5, MAX_TOTAL: 30 }
+const DP = { MAX_USER: 8, MAX_ASST: 16, MAX_TOOL: 7, MIN_TOTAL: 8, MAX_TOTAL: 35 }
 
 // ── Mock helpers ──
 
