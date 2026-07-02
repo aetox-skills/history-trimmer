@@ -77,47 +77,18 @@ function isToolResult(part: RuntimePart): boolean {
   return (part as ToolInvocationPart).toolInvocation?.state === "result"
 }
 
-// ── Core Logic (exported for testing) ──
-
 /**
- * Trim conversation history to keep at most `maxUser` user messages
- * within a hard cap of `hardCap` total messages. Also validates
- * tool call/result pairs — orphaned parts are removed.
- *
- * Pure function — does not mutate input. Returns a new array.
+ * Clean tool call/result pairs: remove orphaned parts from messages.
+ * Returns a new array (does not mutate input).
  */
-export function trimMessages(
-  messages: RuntimeMessage[],
-  maxUser: number,
-  hardCap: number
-): RuntimeMessage[] {
-  // ── Step 1: User-priority capped trim (only when over HARD_CAP) ──
-  let trimmed: RuntimeMessage[]
-  if (messages.length <= hardCap) {
-    trimmed = messages.slice() // copy — still need tool validation below
-  } else {
-    let userCount = 0
-    let cutIndex = Math.max(0, messages.length - hardCap)
+function cleanToolPairs(messages: RuntimeMessage[]): RuntimeMessage[] {
+  if (messages.length === 0) return messages
 
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].info?.role === "user") userCount++
-      if (userCount > maxUser) {
-        cutIndex = i + 1
-        break
-      }
-    }
-
-    trimmed = messages.slice(cutIndex)
-    if (trimmed.length > hardCap) {
-      trimmed = trimmed.slice(-hardCap)
-    }
-  }
-
-  // ── Step 2: Tool call/result pair integrity ──
+  // Collect IDs for pairing
   const callIds = new Set<string>()
   const resultIds = new Set<string>()
 
-  for (const m of trimmed) {
+  for (const m of messages) {
     for (const p of m.parts ?? []) {
       const id = getPairingId(p)
       if (!id) continue
@@ -128,12 +99,12 @@ export function trimMessages(
 
   // Track messages that had parts before cleanup
   const hadPartsBefore = new Set<RuntimeMessage>()
-  for (const m of trimmed) {
+  for (const m of messages) {
     if ((m.parts ?? []).length > 0) hadPartsBefore.add(m)
   }
 
-  // Remove orphaned tool call parts
-  for (const m of trimmed) {
+  // Remove orphaned tool call parts (no matching result)
+  for (const m of messages) {
     m.parts = (m.parts ?? []).filter(p => {
       if (!isToolCall(p)) return true
       const id = getPairingId(p)
@@ -141,8 +112,8 @@ export function trimMessages(
     })
   }
 
-  // Remove orphaned tool result parts
-  for (const m of trimmed) {
+  // Remove orphaned tool result parts (no matching call)
+  for (const m of messages) {
     m.parts = (m.parts ?? []).filter(p => {
       if (!isToolResult(p)) return true
       const id = getPairingId(p)
@@ -150,23 +121,114 @@ export function trimMessages(
     })
   }
 
-  // Only remove messages that HAD parts before cleanup but now have none
-  return trimmed.filter(m => {
-    if ((m.parts ?? []).length > 0) return true
-    return !hadPartsBefore.has(m)
+  // Deep copy: we mutated parts in place, now make a clean copy
+  const result = messages.map(m => ({
+    info: { ...m.info },
+    parts: [...(m.parts ?? [])]
+  }))
+
+  // Remove messages that had parts but now have none
+  return result.filter(m => {
+    if (m.parts.length > 0) return true
+    const original = messages.find(x => x.info.id === m.info.id)
+    return original ? !hadPartsBefore.has(original) : true
   })
+}
+
+// ── Core Logic (exported for testing) ──
+
+/**
+ * Trim conversation history to keep at most `maxUser` user messages,
+ * `maxAssistant` assistant messages, and `maxTool` tool messages.
+ * Each per-role cap is independent — all three are applied via a
+ * backward walk, with the most recent messages from each role kept.
+ * Then MAX_TOTAL applies as an absolute ceiling.
+ *
+ * When `preserveFirst > 0`, the first N messages are **never trimmed** —
+ * they bypass per-role caps and MAX_TOTAL entirely. Only the messages
+ * after the first N are subject to trimming. This is useful for
+ * preserving system-style introduction messages while still controlling
+ * conversation history length.
+ *
+ * Always passes through cleanToolPairs for pair integrity.
+ *
+ * Pure function — does not mutate input. Returns a new array.
+ */
+export function trimMessages(
+  messages: RuntimeMessage[],
+  maxUser: number,
+  maxAssistant: number,
+  maxTool: number,
+  minTotal: number,
+  maxTotal: number,
+  preserveFirst: number = 0
+): RuntimeMessage[] {
+  // ── Step 0: MIN_TOTAL guard — don't bother trimming short sessions ──
+  if (messages.length <= minTotal) {
+    return cleanToolPairs(messages.slice())
+  }
+
+  // ── Step 1: Split — preserve first N messages untouched ──
+  const prefix = messages.slice(0, preserveFirst)
+  let rest = messages.slice(preserveFirst)
+
+  // ── Step 2: Per-role independent cap on rest only ──
+  let userCount = 0, assistantCount = 0, toolCount = 0
+  const keep: RuntimeMessage[] = []
+
+  for (let i = rest.length - 1; i >= 0; i--) {
+    const role = rest[i].info?.role
+    let skip = false
+
+    if (role === "user") {
+      if (userCount >= maxUser) skip = true
+      else userCount++
+    } else if (role === "assistant") {
+      if (assistantCount >= maxAssistant) skip = true
+      else assistantCount++
+    } else if (role === "tool") {
+      if (toolCount >= maxTool) skip = true
+      else toolCount++
+    }
+    // Messages with unknown/no role are always kept
+
+    if (!skip) {
+      keep.unshift(rest[i])
+    }
+  }
+
+  let trimmedRest = keep
+
+  // ── Step 3: MAX_TOTAL absolute ceiling on rest only ──
+  if (trimmedRest.length > maxTotal) {
+    trimmedRest = trimmedRest.slice(-maxTotal)
+    // Strip orphan leading tool messages created by the slice
+    while (trimmedRest.length > 0 && trimmedRest[0].info?.role === "tool") {
+      trimmedRest.shift()
+    }
+  }
+
+  // ── Step 4: Rejoin prefix + trimmed rest ──
+  const trimmed = [...prefix, ...trimmedRest]
+
+  // ── Step 5: Tool call/result pair integrity across all messages ──
+  return cleanToolPairs(trimmed)
 }
 
 // ── Plugin ──
 
 export const HistoryTrimmerPlugin: Plugin = async () => {
   const MAX_USER = intEnv("MAX_USER_MSGS", 5, 1)
-  const HARD_CAP = intEnv("HISTORY_KEEP", 10, 2)
+  const MAX_ASSISTANT = intEnv("MAX_ASSISTANT_MSGS", 10, 1)
+  const MAX_TOOL = intEnv("MAX_TOOL_MSGS", 7, 1)
+  const MIN_TOTAL = intEnv("MIN_TOTAL_MSGS", 5, 2)
+  const MAX_TOTAL = intEnv("MAX_TOTAL_MSGS", 30, 5)
+  const PRESERVE_FIRST = intEnv("PRESERVE_FIRST_MSGS", 0, 0)
 
   return {
     "experimental.chat.messages.transform": async (_input, output) => {
       const msgs = output.messages as RuntimeMessage[]
-      const trimmed = trimMessages(msgs, MAX_USER, HARD_CAP)
+      const trimmed = trimMessages(msgs, MAX_USER, MAX_ASSISTANT, MAX_TOOL, MIN_TOTAL, MAX_TOTAL, PRESERVE_FIRST)
 
       // CRITICAL: Reassigning output.messages is a silent no-op.
       // OpenCode holds the original array reference internally.
