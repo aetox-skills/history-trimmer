@@ -6,7 +6,7 @@ This is not an OpenCode problem. This is not a Claude Code problem. This is not 
 
 This plugin solves that for **OpenCode** by hooking into `experimental.chat.messages.transform` — it caps history at N messages per call before the request leaves your machine. Zero impact on quality. Immediate token savings.
 
-> **Not on OpenCode?** The *principle* is universal. Find your ADE's equivalent of the messages transform hook and apply the same logic. For Claude Code: use `compact` or `/compact`. For Codex: lower `message_limit`. The idea is the same — cap what you send.
+> **Not on OpenCode?** The *principle* is universal — every ADE (Aider, Kilo, Claude Code, Codex, Cursor, ZCode, and so on) has the same problem and some way to cap or compact history. Find your tool's equivalent and apply the same logic: **limit what you send, keep what matters.**
 
 ---
 
