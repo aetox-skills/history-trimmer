@@ -35,7 +35,7 @@
 | **Config (env)** | `~/.bashrc`, `$PROFILE`, `.env`, หรือ `opencode.jsonc` | ที่ override ค่าเริ่มต้น |
 | **Cache Economics** | `CACHE_ECONOMICS.md` | 6 สูตรคำนวณจุดคุ้มทุน |
 | **Model-Adaptive** | `MODEL_ADAPTIVE.md` | สูตรปรับ config ตาม breakeven ratio ของแต่ละโมเดล |
-| **Tests** | `history-trimmer.test.ts` | 33 tests, 7 suites |
+| **Tests** | `history-trimmer.test.ts` | 38 tests, 7 suites |
 
 ## ติดตั้งใน 10 วินาที
 
@@ -161,8 +161,9 @@ MAX_TOTAL_MSGS=44         # safety ceiling (sum=40 + buffer=4)
 | Parameter | v7.1 | v8 | เพราะอะไร |
 |:--|:-:|:-:|:--|
 | MAX_ASSISTANT | 16 | **14** | Retry risk < 0.1% → ลด 2 ตัว = $0.0013/call |
-| MAX_TOOL | 16 | **14** | Covers 2.5+ concurrent tool chains → เกินพอ |
-| MAX_TOTAL | 50 | **44** | sum=40 + buffer=4 → safety ceiling ไม่ active |
+| MAX_TOOL | 16 → role-based only | **14 → dual-mode** | รองรับทั้ง legacy `role="tool"` และ OpenCode parts-based tool pairs (call+result) |
+| MAX_TOTAL | 50 | **44** | sum=40 + buffer=4 → safety fence ไม่ active |
+| **เพิ่ม** | — | **Tool pair cap** | ตัวนับ tool pairs แยกจาก role caps — เก็บเฉพาะคู่ล่าสุดไม่เกิน MAX_TOOL, ลบคู่เกินพร้อม assistant message ที่ว่าง |
 | **Cost/call** | **$0.0121** | **$0.0109** | **-10%** |
 
 ### ปรับแต่งตาม workload — 3 Presets
@@ -390,11 +391,15 @@ v6 แก้ด้วย **per-role caps + MAX_TOTAL**:
 
 2. **PreserveFirst split** — ถ้า `PRESERVE_FIRST_MSGS > 0` ข้อความ N ตัวแรกจะถูกแยกออกไปก่อน **ไม่ถูกแตะต้อง** ส่วนที่เหลือ (conversation portion) เท่านั้นที่ถูกจำกัด — รับประกันว่า system prompt or initial context อยู่ครบเสมอ
 
-3. **Per-role capped trim + MAX_TOTAL** — เฉพาะในส่วน rest: เดินจากท้าย นับ user, assistant, tool แยกกัน หยุดเมื่อทุก role ถึงขีดจำกัด ต่อด้วย MAX_TOTAL safety ceiling
+3. **Per-role capped trim** — เฉพาะในส่วน rest: เดินจากท้าย นับ user, assistant, tool (`role="tool"`) แยกกัน หยุดเมื่อทุก role ถึงขีดจำกัด
 
-4. **Tool call/result pair integrity** — ทำงานเสมอ (แม้ใน session ที่ต่ำกว่า MIN_TOTAL) จับคู่ tool calls กับผลลัพธ์โดยใช้ `toolCallId` (OpenCode runtime format) รองรับ `callID` (SDK format) และ `tool_call_id`/`tool_use_id` (legacy provider format) ลบคู่ที่ขาดออก — ไม่ส่ง tool chains ที่เสียไปให้ LLM
+4. **Tool pair cap** — นับ tool invocation pairs (call+result) ใน `assistant.parts` หลัง per-role caps ถ้าเกิน `MAX_TOOL_MSGS` → เอาคู่เก่าที่สุดออกก่อน ลบ assistant message ที่ว่างเปล่า
 
-5. **In-place mutation ผ่าน `splice`** — การ reassign `output.messages` ใช้ไม่ได้ใน OpenCode (ดู [issue #25754](https://github.com/anomalyco/opencode/issues/25754)) ปลั๊กอินจึง mutate array ในที่เดิมเพื่อให้แน่ใจว่าการเปลี่ยนแปลงมีผล
+5. **MAX_TOTAL safety fence** — เฉพาะส่วน rest: ถ้า rest > MAX_TOTAL → ตัด tail ล่าสุด (prefix bypass) ตามด้วย strip orphan tool message ที่หัว
+
+6. **Tool call/result pair integrity** — ทำงานเสมอ (แม้ใน session ที่ต่ำกว่า MIN_TOTAL) จับคู่ tool calls กับผลลัพธ์โดยใช้ `toolCallId` (OpenCode runtime format) รองรับ `callID` (SDK format) และ `tool_call_id`/`tool_use_id` (legacy provider format) ลบคู่ที่ขาดออก — ไม่ส่ง tool chains ที่เสียไปให้ LLM
+
+7. **In-place mutation ผ่าน `splice`** — การ reassign `output.messages` ใช้ไม่ได้ใน OpenCode (ดู [issue #25754](https://github.com/anomalyco/opencode/issues/25754)) ปลั๊กอินจึง mutate array ในที่เดิมเพื่อให้แน่ใจว่าการเปลี่ยนแปลงมีผล
 
 - **User messages** — เก็บสูงสุด 10 อันล่าสุด (คำถามของคุณคือหัวใจของการสนทนา)
 - **Assistant messages** — เก็บสูงสุด 14 อันล่าสุด
@@ -415,14 +420,14 @@ v6 แก้ด้วย **per-role caps + MAX_TOTAL**:
 
 | ตัวแปร | v8 default | คำอธิบาย |
 |:---------|:-------:|:------------|
-| `PRESERVE_FIRST_MSGS` | `2` | กัน N ข้อความแรกไว้ **ไม่ถูกตัด** — ใช้สำหรับ system/intro messages |
-| `MAX_USER_MSGS` | `10` | จำนวน user message สูงสุด (พอสำหรับ ~5 รอบถาม-ตอบ) |
-| `MAX_ASSISTANT_MSGS` | `14` | จำนวน assistant message สูงสุด — ลดจาก 16 เพราะ retry risk < 0.1% |
-| `MAX_TOOL_MSGS` | `14` | จำนวน tool message สูงสุด — ครอบคลุม 2.5+ concurrent tool chains |
+| `PRESERVE_FIRST_MSGS` | `2` | กัน N ข้อความแรกไว้ **ไม่ถูกตัด** — bypass ทั้ง per-role caps และ MAX_TOTAL |
+| `MAX_USER_MSGS` | `10` | จำนวน user message สูงสุดในส่วน rest (ไม่นับ preserveFirst) |
+| `MAX_ASSISTANT_MSGS` | `14` | จำนวน assistant message สูงสุดในส่วน rest |
+| `MAX_TOOL_MSGS` | `14` | ควบคุม tool evidence **สองแบบ**: (1) ข้อความ `role="tool"` (legacy) (2) จำนวน tool invocation pairs (call+result) ใน `assistant.parts` (OpenCode runtime) — เก็บเฉพาะคู่ล่าสุด, ลบคู่เก่าที่เกิน |
 | `MIN_TOTAL_MSGS` | `8` | ไม่ตัดถ้าจำนวนข้อความทั้งหมด ≤ ค่านี้ |
-| `MAX_TOTAL_MSGS` | `44` | safety ceiling = sum(per-role) + buffer(4) — ไม่ active ถ้า per-role caps ตัดก่อน |
+| `MAX_TOTAL_MSGS` | `44` | safety fence **เฉพาะส่วน rest** — prefix (preserveFirst) bypass ամբողн. Visible max = PRESERVE_FIRST + min(MAX_TOTAL, role-capped_rest) |
 
-> **หมายเหตุเรื่อง runtime format:** OpenCode internal format เก็บ tool calls/results เป็น `ToolInvocationPart` ภายใน assistant message (ไม่ใช่ role `"tool"` แยก) ดังนั้น tool pairs ถูกควบคุมโดย `MAX_ASSISTANT_MSGS` + pair cleanup ไม่ใช่ `MAX_TOOL_MSGS` โดยตรง
+> **สำคัญเรื่อง runtime format:** OpenCode internal format ส่ง tool calls/results เป็น `ToolInvocationPart` ใน `assistant.parts` (ไม่มี `role="tool"`) ดังนั้น `MAX_TOOL_MSGS` ควบคุม tool evidence ผ่าน **pair-based counting** — นับคู่ call+result, เก็บเฉพาะ N คู่ล่าสุด, ลบคู่เก่าที่เกิน pair cap แล้วลบ assistant message ที่ว่างเปล่า สำหรับ provider ที่ใช้ `role="tool"` แยก (legacy), `MAX_TOOL_MSGS` ยังคงนับ message-level เหมือนเดิม
 
 ```bash
 # override ทั้ง session
@@ -450,9 +455,10 @@ export MAX_TOTAL_MSGS=36
 npx tsx --test history-trimmer.test.ts
 ```
 
-**33 tests ใน 10 suites** ครอบคลุม:
+**38 tests ใน 7 suites** ครอบคลุม:
 - MIN_TOTAL guard (no-op, single message)
-- Per-role caps (MAX_USER, MAX_ASSISTANT, MAX_TOOL, combined, recency)
+- Per-role caps (MAX_USER, MAX_ASSISTANT, MAX_TOOL legacy role, MAX_TOOL parts-based pairs, hybrid format, combined, recency)
+- Tool pair cap (keep N newest pairs, remove oldest pairs first, partial pairs don't count, empty assistant cleanup, maxTool=0)
 - MAX_TOTAL absolute ceiling (tight ceiling, orphan strip after total trim, MIN_TOTAL wins over MAX_TOTAL)
 - Tool pair integrity (matched pairs preserved, orphaned calls/results removed, empty message cleanup)
 - Edge cases (no parts, undefined parts, consecutive users, all-tool sessions)

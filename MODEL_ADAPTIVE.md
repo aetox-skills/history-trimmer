@@ -32,9 +32,9 @@ MAX_TOTAL     = 10 + MAX_ASSISTANT + MAX_TOOL + 6 (buffer)
 | `PRESERVE_FIRST_MSGS` | 2 | คงที่ — ไม่ขึ้นกับ R |
 | `MAX_USER_MSGS` | 10 | คงที่ — user คือหัวใจ |
 | `MAX_ASSISTANT_MSGS` | 14 | `max(10, round(14 × factor))` |
-| `MAX_TOOL_MSGS` | 14 | `max(8, round(14 × factor))` |
+| `MAX_TOOL_MSGS` | 14 | `max(8, round(14 × factor))` — ควบคุมทั้ง legacy `role="tool"` และคู่ tool invocation (call+result) ใน `assistant.parts` |
 | `MIN_TOTAL_MSGS` | 8 | คงที่ — safety guard |
-| `MAX_TOTAL_MSGS` | 44 | `10 + MAX_ASSISTANT + MAX_TOOL + 6` |
+| `MAX_TOTAL_MSGS` | 44 | `10 + MAX_ASSISTANT + MAX_TOOL + 6` — ใช้กับ rest portion เท่านั้น (preserveFirst bypass) |
 
 > **floor:** 10/10/8 (assistant/tool/total) — ต่ำกว่านี้ conversation coherence พัง  
 > **ceiling:** 16/16/48 — สูงกว่านี้ cache hit ratio ไม่เพิ่มขึ้นมากพอให้คุ้ม

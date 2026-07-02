@@ -163,14 +163,17 @@ buffer = estimated_tool_overflow + safety_margin (4-8)
 
 ตั้ง MAX_TOTAL ให้สูงกว่าผลรวม per-role caps เล็กน้อย เพื่อให้ per-role caps เป็นตัวตัดหลัก ไม่ใช่ MAX_TOTAL บีบคอ
 
-| Per-role caps | Sum | Buffer | MAX_TOTAL |
-|:--|:-:|:-:|:-:|
-| 10U+16A+12T = 38 | +2P | 4-6 | **44-46** |
-| 10U+16A+14T = 40 | +2P | 4-6 | **46-48** |
-| 10U+16A+16T = 42 | +2P | 4-6 | **48-50** |
+> ⚠️ **MAX_TOTAL ใช้กับ rest portion เท่านั้น** — preserveFirst bypass ตลอด  
+> Visible max = PRESERVE_FIRST + min(MAX_TOTAL, role-capped_rest)
 
-ถ้า `sum + buffer > MAX_TOTAL` → MAX_TOTAL เป็น active constraint → ตัด oldest messages เพิ่ม
-ถ้า `sum + buffer ≤ MAX_TOTAL` → per-role caps เป็นตัวตัด → MAX_TOTAL แค่ safety ceiling
+| Per-role caps | Preserve + Sum | Buffer | MAX_TOTAL | Visible max |
+|:--|:-:|:-:|:-:|:-:|
+| 10U+16A+12T = 38 | +2P = **40** | 4-6 | **44-46** | 2 + 38 = **40** |
+| 10U+16A+14T = 40 | +2P = **42** | 4-6 | **46-48** | 2 + 40 = **42** |
+| 10U+16A+16T = 42 | +2P = **44** | 4-6 | **48-50** | 2 + 42 = **44** |
+
+ถ้า `sum + buffer > MAX_TOTAL` → MAX_TOTAL เป็น active constraint → ตัด oldest messages เพิ่ม (เฉพาะ rest)
+ถ้า `sum + buffer ≤ MAX_TOTAL` → per-role caps เป็นตัวตัด → MAX_TOTAL แค่ safety fence (ไม่ active)
 
 ---
 
@@ -187,6 +190,8 @@ tool_ratio = tool_calls_in_window / total_messages_in_window
 ```
 
 ### Recommended Presets
+
+> **หมายเหตุทุก preset:** `MAX_TOOL_MSGS` ควบคุม tool evidence 2 รูปแบบพร้อมกัน — legacy `role="tool"` และคู่ tool invocation (call+result) ใน `assistant.parts` สำหรับ OpenCode runtime format
 
 #### A) Chat / Research (tool-light)
 

@@ -96,7 +96,7 @@ describe("History Trimmer (per-role caps)", () => {
       assert.equal(assitants.length, 3, `expected 3 assistants, got ${assitants.length}`)
     })
 
-    it("keeps at most MAX_TOOL tool messages", () => {
+    it("keeps at most MAX_TOOL tool-role messages (legacy format)", () => {
       const msgs: RuntimeMessage[] = [
         userMsg("u1"), assistantMsg("a1"), toolMsg("t1"),
         userMsg("u2"), assistantMsg("a2"), toolMsg("t2"),
@@ -108,6 +108,115 @@ describe("History Trimmer (per-role caps)", () => {
       const result = trimMessages([...msgs], MAX_USER, MAX_ASST, 2, MIN_TOTAL, MAX_TOTAL)
       const tools = result.filter(m => m.info.role === "tool")
       assert.equal(tools.length, 2, `expected 2 tools, got ${tools.length}`)
+    })
+
+    // ── Parts-based tool evidence (OpenCode runtime format) ──
+
+    it("keeps at most MAX_TOOL tool invocation pairs (parts format)", () => {
+      // 6 pairs of tool call+result in OpenCode runtime format
+      const msgs: RuntimeMessage[] = []
+      for (let i = 0; i < 6; i++) {
+        msgs.push(userMsg(`u${i}`))
+        msgs.push(assistantMsg(`call_${i}`, [toolCallPart(`t${i}`)]))
+        msgs.push(assistantMsg(`res_${i}`, [toolResultPart(`t${i}`)]))
+      } // 18 messages, 6 tool pairs
+
+      const result = trimMessages([...msgs], MAX_USER, MAX_ASST, 2, 2, 50)
+      // 2 complete pairs should be preserved → 4 tool-related messages
+      const toolParts = result.flatMap(m => m.parts ?? []).filter(
+        p => p.type === "tool-invocation"
+      )
+      // 2 pairs × 2 parts (call+result) = 4 parts
+      assert.equal(toolParts.length, 4, `expected 4 tool parts (2 pairs), got ${toolParts.length}`)
+      // Verify it's the most recent 2 pairs
+      const pairIds = new Set(
+        toolParts.map(p => (p as ToolInvocationPart).toolInvocation.toolCallId)
+      )
+      assert.ok(pairIds.has("t4"), "pair t4 should be kept")
+      assert.ok(pairIds.has("t5"), "pair t5 should be kept")
+      assert.ok(!pairIds.has("t0"), "oldest pair t0 should be removed")
+    })
+
+    it("removes empty assistant messages after pair cap cleanup", () => {
+      // Two assistant messages that ONLY contain tool parts
+      const msgs: RuntimeMessage[] = [
+        userMsg("u1"),
+        assistantMsg("a_call", [toolCallPart("tc1")]),
+        assistantMsg("a_res", [toolResultPart("tc1")]),
+      ]
+      const result = trimMessages([...msgs], 5, 5, 0, 2, 30)
+      // maxTool=0 → remove all tool pairs → both assistant messages empty → removed
+      const assistants = result.filter(m => m.info.role === "assistant")
+      assert.equal(assistants.length, 0, "both tool-only assistants should be removed")
+    })
+
+    it("pair cap removes oldest pairs while keeping recent ones intact", () => {
+      const msgs: RuntimeMessage[] = [
+        userMsg("u0"), assistantMsg("a0_call", [toolCallPart("old1")]),
+        assistantMsg("a0_res", [toolResultPart("old1")]),
+        userMsg("u1"), assistantMsg("a1_call", [toolCallPart("mid1")]),
+        assistantMsg("a1_res", [toolResultPart("mid1")]),
+        userMsg("u2"), assistantMsg("a2_call", [toolCallPart("new1")]),
+        assistantMsg("a2_res", [toolResultPart("new1")]),
+      ] // 3 pairs: old1, mid1, new1
+
+      const result = trimMessages([...msgs], 5, 5, 2, 2, 30)
+      // maxTool=2 → keep 2 newest pairs (mid1, new1)
+      const toolParts = result.flatMap(m => m.parts ?? []).filter(
+        p => p.type === "tool-invocation"
+      )
+      const pairIds = Array.from(new Set(
+        toolParts.map(p => (p as ToolInvocationPart).toolInvocation.toolCallId)
+      ))
+      assert.equal(pairIds.length, 2, "should keep 2 pairs")
+      assert.ok(pairIds.includes("mid1"), "mid1 should survive")
+      assert.ok(pairIds.includes("new1"), "new1 should survive")
+      assert.ok(!pairIds.includes("old1"), "oldest pair old1 should be removed")
+    })
+
+    it("partial pair (call without result) does NOT count toward maxTool", () => {
+      // 1 complete pair + 1 orphan call
+      const msgs: RuntimeMessage[] = [
+        userMsg("u0"), assistantMsg("full_call", [toolCallPart("complete")]),
+        assistantMsg("full_res", [toolResultPart("complete")]),
+        userMsg("u1"), assistantMsg("orphan_call", [toolCallPart("orphan")]),
+      ]
+
+      const result = trimMessages([...msgs], 5, 5, 1, 2, 30)
+      // maxTool=1 → 1 complete pair kept, orphan removed by cleanToolPairs
+      const toolParts = result.flatMap(m => m.parts ?? []).filter(
+        p => p.type === "tool-invocation"
+      )
+      const completeKeep = toolParts.filter(
+        p => (p as ToolInvocationPart).toolInvocation.toolCallId === "complete"
+      )
+      assert.equal(completeKeep.length, 2, "complete pair should survive")
+      const orphanKeep = toolParts.filter(
+        p => (p as ToolInvocationPart).toolInvocation.toolCallId === "orphan"
+      )
+      assert.equal(orphanKeep.length, 0, "orphan call should be cleaned")
+    })
+
+    it("tool pair cap works alongside role-based tool cap (hybrid format)", () => {
+      // Hybrid: 2 parts-based pairs + 2 tool-role messages
+      const msgs: RuntimeMessage[] = [
+        assistantMsg("p1_call", [toolCallPart("p1")]),
+        assistantMsg("p1_res", [toolResultPart("p1")]),
+        assistantMsg("p2_call", [toolCallPart("p2")]),
+        assistantMsg("p2_res", [toolResultPart("p2")]),
+        toolMsg("legacy1"),
+        toolMsg("legacy2"),
+      ]
+      const result = trimMessages([...msgs], 5, 5, 2, 2, 30)
+      // maxTool=2 → either 2 pairs OR 2 tool-role msgs, whichever hits first
+      // After per-role caps: 2 tool-role msgs kept (maxTool=2)
+      // After pair cap: 2 pairs kept
+      const toolRoleMsgs = result.filter(m => m.info.role === "tool")
+      assert.equal(toolRoleMsgs.length, 2, "2 tool-role messages")
+      const pairParts = result.flatMap(m => m.parts ?? []).filter(
+        p => p.type === "tool-invocation"
+      )
+      assert.equal(pairParts.length, 4, "2 tool pairs preserved (4 parts)")
     })
 
     it("applies each per-role cap independently", () => {
