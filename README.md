@@ -71,18 +71,21 @@ A single session without this plugin sends history that grows with every call. H
 
 ### Savings by model (per session, ~100K history avoided)
 
-| Model | Price /M miss | Saved per session | Saved per month (30 sessions) |
-|:--|:--:|:--:|:--:|
-| DeepSeek V4 Flash | $0.435 | **~$0.04** | ~$1.30 |
-| DeepSeek V4 Pro | $0.435 | **~$0.04** | ~$1.30 |
-| Claude 4 Haiku | $0.80 | **~$0.08** | ~$2.40 |
-| Gemini 2.5 Pro | $1.25 | **~$0.13** | ~$3.75 |
-| GPT-5 | $2.50 | **~$0.25** | ~$7.50 |
-| Claude 4 Sonnet | $3.00 | **~$0.30** | ~$9.00 |
+Pricing as of **2 Jul 2026** (cache-miss input rate). Add cache hits and your session grows — these are minimum savings.
 
-> **The more expensive your model, the more this plugin pays for itself.** A 20-line TypeScript file saving $9/month on Claude Sonnet — zero maintenance.
+| Model | Input price /M | 10 calls (~20K) | 20 calls (~40K) | Session (~100K) | Month (30 sessions) |
+|:--|:--:|:--:|:--:|:--:|:--:|
+| DeepSeek V4 Flash | $0.435 | ~$0.01 | ~$0.02 | ~$0.04 | **~$1.30** |
+| DeepSeek V4 Pro | $0.435 | ~$0.01 | ~$0.02 | ~$0.04 | **~$1.30** |
+| GPT-5 | $1.25 | ~$0.03 | ~$0.05 | ~$0.13 | **~$3.75** |
+| Claude Sonnet 4.5 | $3.00 | ~$0.06 | ~$0.12 | ~$0.30 | **~$9.00** |
+| Claude Opus 4.8 | $5.00 | ~$0.10 | ~$0.20 | ~$0.50 | **~$15.00** |
+| GPT-5.5 | $5.00 | ~$0.10 | ~$0.20 | ~$0.50 | **~$15.00** |
 
-**The math works on any model:** 100K history not sent = savings proportional to your token price. No downside, no tradeoff — just less waste.
+> **The more expensive your model, the more this plugin pays for itself.**  
+> On Opus 4.8 or GPT-5.5, a 20-line plugin saves **$15/month** — just by not sending history the model doesn't need.
+
+**The math works on any model:** history not sent = tokens you don't pay for. No downside, no tradeoff — just less waste.
 
 ## Compatibility
 
