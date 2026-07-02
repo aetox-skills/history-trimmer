@@ -73,7 +73,7 @@ Pricing as of **2 Jul 2026** (cache-miss input). Multiply by your session volume
 > **The more expensive your model, the more this plugin pays for itself.**  
 > On Opus 4.8 or GPT-5.5: **$15/month** — from a 20-line TypeScript file.
 
-The math scales with your setup. More MCP servers, more skills, bigger instruction files → bigger base prompt → more tokens saved per call.
+> **This plugin trims conversation history — not system prompts.** System prompt bloat (too many MCP servers, skills, instruction files) lives in a different layer and needs a different strategy: comment out unused MCPs, trim instruction files, shorten skill descriptions. Pair this plugin with [token-saver (RTK)](https://github.com/aetox-skills/token-saver) for command output and [token-calc](https://github.com/aetox-skills/token-calc) to measure what to cut first.
 
 ---
 
