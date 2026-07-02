@@ -1,101 +1,44 @@
 # OpenCode History Trimmer Plugin
 
-Caps conversation history to **N messages per API call** — saves tokens by not sending the entire session history every time.
+Every time you hit enter, your entire conversation history — including messages from 50 exchanges ago — gets packed up and sent to the API. **You pay for every single one of those tokens.** Most of them are irrelevant to what you're asking right now.
 
-## Why
+This plugin caps history at **N messages per call** — the rest are discarded before the request leaves your machine. Zero impact on quality. Immediate token savings.
 
-OpenCode sends the full conversation history with every API call. Over a long session, history can grow to 100+ messages, most of which the model doesn't need to re-read. This plugin trims it client-side before the request goes out.
+---
 
-### The philosophy: History is not memory
-
-The model can already **read the current session** — it knows what was just said. And most workflows **move forward** — you don't revisit what you discussed 20 messages ago. The past doesn't help the next step.
-
-If you're using AI as a **personal assistant** (like Mike does), long-term memory belongs in a knowledge base — Obsidian, skills, journal files, project docs — not in API call history. That's where the real context lives.
-
-This plugin is optimized for that mindset: keep just enough context for the current exchange, and let skills + docs handle everything else.
-
-**3 messages is enough for most assistant workflows.** If you regularly need deep history reference, raise it with `HISTORY_KEEP`.
-
-## How It Works
-
-```typescript
-"experimental.chat.messages.transform" → filters messages array before API call
-```
-
-- **System messages** (instructions, context) — always kept
-- **Non-system messages** (user, assistant, tool results) — only the last N are kept
-- The rest are discarded before the HTTPS request to the LLM provider
-
-## Install
-
-1. Copy `history-trimmer.ts` to your OpenCode plugins directory:
+## Install in 10 seconds
 
 ```bash
-# Linux / macOS
+# Copy 1 file, restart OpenCode. Done.
 cp history-trimmer.ts ~/.config/opencode/plugins/
+```
 
-# Windows (PowerShell)
+**Windows:**
+```powershell
 Copy-Item history-trimmer.ts "$env:USERPROFILE\.config\opencode\plugins\"
 ```
 
-2. **Restart OpenCode** — plugins are auto-loaded on startup.
+Restart OpenCode → plugins auto-load. No config file, no dependencies, no setup.
 
-## Configuration
+---
 
-Set the `HISTORY_KEEP` environment variable to control how many messages are kept:
+## What you save
 
-```bash
-# Keep 6 messages instead of default 3
-export HISTORY_KEEP=6
+History grows every call. Without a cap, a 50-call session sends **~100,000 tokens of conversation the model has already seen**. With the trimmer, history stays flat at ~1,500 tok — no matter how long you chat.
 
-# Windows
-$env:HISTORY_KEEP = "6"
-```
+| | 10 calls | 20 calls | 50 calls |
+|:--|:--:|:--:|:--:|
+| **Without trimmer** — history sent | ~20,000 tok | ~40,000 tok | ~100,000+ tok |
+| **With trimmer** — history sent | **~1,500 tok** | **~1,500 tok** | **~1,500 tok** |
+| **Waste avoided** | **~18,500 tok** | **~38,500 tok** | **~98,500+ tok** |
 
-| Default | Description |
-|:-------:|:------------|
-| `3` | current exchange + 1 previous — sufficient for assistant workflows where long-term memory lives in skills/docs/Obsidian |
-
-## Real-world Savings
-
-A single session without this plugin sends history that grows with every call. Here's what you save by capping at 3 messages.
-
-### The compounding problem
-
-History doesn't just add a few tokens — it compounds. On every call, the full accumulated history is sent again. At 10 calls, history is ~20K. At 20 calls, ~40K. By session 50, over 100K.
-
-With the trimmer, history stays **flat** at ~1.5K no matter how long you chat.
-
-> **More MCP servers, more skills, more instruction files = bigger base prompt → bigger savings.** If your system prompt is 30K instead of 15K, the waste doubles. The trimmer's value scales with how much you've loaded in.
-
-### Scenario: 15K system prompt at 10 / 20 calls
-
-Assume a typical optimized setup: 15K system prompt + user message + history. See what happens with and without the trimmer:
-
-| | 10 calls | 20 calls |
-|:--|:--:|:--:|
-| **Without trimmer** — history sent | ~18,000 tok | ~38,000 tok |
-| **With trimmer** — history sent | **~1,500 tok** | **~1,500 tok** |
-| **History waste avoided** | **~16,500 tok** | **~36,500 tok** |
-
-That 16–36K of history is sent **on every call after the first**. It compounds across the session. The trimmer eliminates it completely.
-
-### Example: Mike's OpenCode setup
-
-A real personal-assistant workflow with trimmed instructions, 4 MCP servers, and 3-message history cap:
-
-| Metric | Without trimmer | With trimmer (3 msgs) |
-|:--|:--:|:--:|
-| History sent per call | grows to 100K+ tok | **~1,500 tok** (flat) |
-| History saved per session | — | **~100K tok** |
-| Cache hit rate | ~30% | **~77%** |
-| Session cost (DeepSeek V4 Flash) | ~$0.50-1.00 | **~$0.13** |
+That waste is sent **on every call** — it compounds. The trimmer eliminates it in one shot.
 
 ### Savings by model
 
-What ~100K of history costs you per session on different models. Pricing as of **2 Jul 2026** (cache-miss input rate). Add cache hits and your session grows — these are minimum savings.
+Pricing as of **2 Jul 2026** (cache-miss input). Multiply by your session volume.
 
-| Model | Input /M | 10 calls (~20K) | 20 calls (~40K) | Session (~100K) | Month |
+| Model | Price /M tok | 10 calls | 20 calls | Session (~100K) | **Month** |
 |:--|:--:|:--:|:--:|:--:|:--:|
 | DeepSeek V4 Flash 🇨🇳 | $0.14 | ~$0.003 | ~$0.006 | ~$0.01 | **~$0.42** |
 | DeepSeek V4 Pro 🇨🇳 | $0.435 | ~$0.01 | ~$0.02 | ~$0.04 | **~$1.30** |
@@ -109,15 +52,56 @@ What ~100K of history costs you per session on different models. Pricing as of *
 | Claude Opus 4.8 | $5.00 | ~$0.10 | ~$0.20 | ~$0.50 | **~$15.00** |
 
 > **The more expensive your model, the more this plugin pays for itself.**  
-> On Opus 4.8 or GPT-5.5, a 20-line plugin saves **$15/month** — and that's *before* cache hit discounts. On DeepSeek Flash it's still free optimization.
+> On Opus 4.8 or GPT-5.5: **$15/month** — from a 20-line TypeScript file.
 
-**The math works on any model:** history not sent = tokens you don't pay for. No downside, no tradeoff — just less waste. And if your setup has 30K+ system prompt (many skills, many MCPs), the waste compounds faster — so the savings grow accordingly.
+The math scales with your setup. More MCP servers, more skills, bigger instruction files → bigger base prompt → more tokens saved per call.
+
+---
+
+## Why this works
+
+### History is not memory
+
+The model can already read the current session — it knows what you just said. And most workflows **move forward** — you don't revisit what you discussed 20 messages ago.
+
+If you use AI as a **personal assistant**, long-term memory belongs in a knowledge base — Obsidian, skills, journal files, project docs — not in API call history. That's where real context lives.
+
+This plugin is optimized for that principle: **keep just enough context for the current exchange, and let skills + docs handle everything else.**
+
+### How it works
+
+```typescript
+"experimental.chat.messages.transform" → filters messages array before API call
+```
+
+- **System messages** (instructions, context) — always kept
+- **Non-system messages** (user, assistant, tool results) — only the last N are kept
+- The rest are discarded before the HTTPS request to the LLM provider
+
+---
+
+## Configuration
+
+| Variable | Default | Description |
+|:---------|:-------:|:------------|
+| `HISTORY_KEEP` | `3` | Number of non-system messages to keep per call |
+
+```bash
+export HISTORY_KEEP=6      # Keep 6 instead of 3
+```
+
+**3 messages** is enough for most assistant workflows. If you regularly reference deep history, raise it.
+
+---
 
 ## Compatibility
 
 - OpenCode v1.16+
 - Uses `experimental.chat.messages.transform` hook
-- Safe to use with any LLM provider (no provider-specific behavior)
+- Works with any LLM provider (no provider-specific behavior)
+- Zero dependencies — one TypeScript file
+
+---
 
 ## License
 
