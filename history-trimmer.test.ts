@@ -379,21 +379,117 @@ describe("History Trimmer (per-role caps)", () => {
       ]
       const result = trimMessages([...msgs], 5, 5, 5, 2, 30)
       assert.equal(result.length, 3)
+      // Verify both parts survive cleanup (paired correctly)
+      const allToolParts = result.flatMap(m => m.parts ?? [])
+      const sdks = allToolParts.filter(p => (p as Record<string, unknown>).callID === "sdk-call-1")
+      assert.equal(sdks.length, 2, "SDK paired call+result should survive cleanup")
+    })
+
+    it("removes orphan SDK call (no matching result)", () => {
+      const orphanCall: RuntimePart = {
+        type: "tool",
+        callID: "orphan-sdk",
+        state: "running",
+        tool: "bash"
+      }
+      const msgs = [
+        assistantMsg("a1", [orphanCall]),
+        userMsg("u1"),
+        assistantMsg("a2"),
+      ]
+      const result = trimMessages([...msgs], 5, 5, 5, 2, 30)
+      const a1 = result.find(m => m.info.id === "a1")
+      if (a1) {
+        const toolParts = (a1.parts ?? []).filter(
+          p => (p as Record<string, unknown>).callID === "orphan-sdk"
+        )
+        assert.equal(toolParts.length, 0, "orphan SDK call should be removed")
+      }
+    })
+
+    it("removes orphan SDK result (no matching call)", () => {
+      const orphanResult: RuntimePart = {
+        type: "tool",
+        callID: "orphan-sdk-result",
+        state: "completed",
+        tool: "bash"
+      }
+      const msgs = [
+        assistantMsg("a1", [orphanResult]),
+        userMsg("u1"),
+        assistantMsg("a2"),
+      ]
+      const result = trimMessages([...msgs], 5, 5, 5, 2, 30)
+      const a1 = result.find(m => m.info.id === "a1")
+      if (a1) {
+        const toolParts = (a1.parts ?? []).filter(
+          p => (p as Record<string, unknown>).callID === "orphan-sdk-result"
+        )
+        assert.equal(toolParts.length, 0, "orphan SDK result should be removed")
+      }
     })
 
     it("handles legacy tool_call_id/tool_use_id format", () => {
+      // Legacy call: has tool_call_id (OpenAI format), no tool_use_id
       const legacyCall: RuntimePart = {
         type: "tool",
-        tool_call_id: "legacy-1",
+        tool_call_id: "legacy-1"
+      }
+      // Legacy result: has tool_use_id (Anthropic format)
+      const legacyResult: RuntimePart = {
+        type: "tool",
         tool_use_id: "legacy-1"
       }
       const msgs = [
         assistantMsg("a1", [legacyCall]),
         userMsg("u1"),
-        assistantMsg("a2", [{ type: "tool", tool_use_id: "legacy-1" }]),
+        assistantMsg("a2", [legacyResult]),
       ]
       const result = trimMessages([...msgs], 5, 5, 5, 2, 30)
-      assert.equal(result.length, 3)
+      assert.equal(result.length, 3, "paired legacy call+result should survive")
+      // Verify both parts survive cleanup
+      const allToolParts = result.flatMap(m => m.parts ?? [])
+      const callParts = allToolParts.filter(p => (p as Record<string, unknown>).tool_call_id === "legacy-1")
+      const resultParts = allToolParts.filter(p => (p as Record<string, unknown>).tool_use_id === "legacy-1")
+      assert.equal(callParts.length, 1, "legacy call should survive")
+      assert.equal(resultParts.length, 1, "legacy result should survive")
+    })
+
+    it("removes orphan legacy format result (no matching call)", () => {
+      const orphanLegacy: RuntimePart = {
+        type: "tool",
+        tool_use_id: "legacy-orphan"
+      }
+      const msgs = [
+        assistantMsg("a1", [orphanLegacy]),
+        userMsg("u1"),
+        assistantMsg("a2"),
+      ]
+      const result = trimMessages([...msgs], 5, 5, 5, 2, 30)
+      const a1 = result.find(m => m.info.id === "a1")
+      if (a1) {
+        const toolParts = (a1.parts ?? []).filter(
+          p => (p as Record<string, unknown>).tool_use_id === "legacy-orphan"
+        )
+        assert.equal(toolParts.length, 0, "orphan legacy result should be removed")
+      }
+    })
+
+    it("pure function does not mutate input messages", () => {
+      const msgs = [
+        assistantMsg("a1", [toolCallPart("tc1")]),
+        userMsg("u1"),
+        assistantMsg("a2", [toolResultPart("tc1")]),
+      ]
+      const originalParts = msgs.map(m => [...(m.parts ?? [])])
+      trimMessages([...msgs], 5, 5, 5, 2, 30)
+      for (let i = 0; i < msgs.length; i++) {
+        const origLen = originalParts[i].length
+        const nowLen = (msgs[i].parts ?? []).length
+        assert.equal(nowLen, origLen,
+          `input message ${msgs[i].info.id} was mutated: parts ${origLen} → ${nowLen}`
+        )
+      }
     })
 
     it("mutates array in place via splice (not reassignment)", () => {

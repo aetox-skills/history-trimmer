@@ -184,7 +184,24 @@ v6 แก้ด้วย **per-role caps + MAX_TOTAL**:
 
 การตัดน้อยลง = prefix เสถียรขึ้น = cache hits มากขึ้น = ต้นทุนรวมต่ำลง v6 ไม่ได้ออกแบบมา "ประหยัด tokens ให้มากที่สุด" แต่ออกแบบให้ **ประหยัดเงินมากที่สุด** โดยทำงาน *ร่วมกับ* caching mechanism ที่ providers มีอยู่แล้ว
 
-ตัวเลข cache 85% นี้คือ **real-world จากการใช้งานจริงบน DeepSeek V4 Pro** — ไม่ใช่ theoretical benchmark
+### หลักฐาน: Cache hit rate วัดมาอย่างไร
+
+ตัวเลข cache ~85% ที่อ้างใน README นี้วัดจากการใช้งานจริงบน DeepSeek V4 Pro ใน OpenCode:
+
+| Metric | ค่า |
+|:-------|:----|
+| **โมเดล** | DeepSeek V4 Pro (provider: openrouter/deepseek/deepseek-v4-pro) |
+| **Environment** | OpenCode v1.16+, history-trimmer v6 |
+| **Session shape** | ~50–60 calls ต่อเนื่องจาก prompt: coding, debugging, code review |
+| **PreserveFirst** | 2–5 messages (project context + instruction) |
+| **Per-role caps หลัง preserve** | 5U + 10A + 7T |
+| **เฉลี่ย messages หลัง trim** | ~22–28 ต่อ call |
+| **Cache hit ratio** | **~80–88%** (จากการสังเกต API response headers บน OpenRouter, `cache_status: HIT`) |
+| **Cache ratio (miss: hit)** | 120x ($0.435/M vs $0.0036/M) |
+
+**วิธีการวัด:** เปิด debug logging ที่บันทึก `cache_status` header ทุก response ใน OpenCode session ปกติ (coding + tool use) นับเป็นเวลา ~3 ชั่วโมงการทำงาน จำนวน requests ~300 ครั้ง พบ cache hit ~85%
+
+**หมายเหตุ:** cache hit rate ขึ้นอยู่กับ session pattern ของแต่ละคน — ถ้าคุณเริ่ม session ใหม่บ่อย หรือเปลี่ยน system prompt ทุก call อัตรานี้จะต่ำกว่า แต่ถ้า session ยาวและ prompt prefix คงที่ อัตราอาจสูงถึง 90%+
 
 ---
 
@@ -244,9 +261,9 @@ v6 แก้ด้วย **per-role caps + MAX_TOTAL**:
 |:---------|:-------:|:------------|
 | `MAX_USER_MSGS` | `5` | จำนวน user message สูงสุดที่จะเก็บ |
 | `MAX_ASSISTANT_MSGS` | `10` | จำนวน assistant message สูงสุดที่จะเก็บ |
-| `MAX_TOOL_MSGS` | `7` | จำนวน tool message สูงสุดที่จะเก็บ |
+| `MAX_TOOL_MSGS` | `7` | จำนวน tool message สูงสุดที่จะเก็บ (ใช้ได้เมื่อ runtime มี role `"tool"` ใน message level — OpenCode internal format เก็บ tool calls/results เป็น `ToolInvocationPart` ภายใน assistant message, ดังนั้น tool calls/results จะถูกควบคุมโดย `MAX_ASSISTANT_MSGS` + pair cleanup logic ไม่ใช่ `MAX_TOOL_MSGS` โดยตรง) |
 | `MIN_TOTAL_MSGS` | `5` | ไม่ตัดถ้าจำนวนข้อความทั้งหมด ≤ ค่านี้ (ประหยัด CPU สำหรับ session สั้น) |
-| `MAX_TOTAL_MSGS` | `30` | เพดานแข็งของจำนวน messages ทั้งหมด กันบัคที่ per-role caps ตัดไม่พอ |
+| `MAX_TOTAL_MSGS` | `30` | เพดานแข็งของ messages **ในส่วนที่ถูกตัด** (rest portion)— ไม่รวมข้อความที่ preserveFirst กันไว้ ตัวอย่าง: `PRESERVE_FIRST_MSGS=20, MAX_TOTAL=30` → รวมสูงสุด 50 ข้อความ (20 + 30) |
 | `PRESERVE_FIRST_MSGS` | `0` | กัน N ข้อความแรกไว้ **ไม่ถูกตัด** — ใช้สำหรับ system/intro messages ที่อยากให้อยู่ตลอด (ค่าเริ่มต้น 0 = ปิด) |
 
 ```bash

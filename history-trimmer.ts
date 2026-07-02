@@ -64,22 +64,48 @@ function getPairingId(part: RuntimePart): string | undefined {
   return undefined
 }
 
-/** Check if a ToolInvocationPart is a tool call (not result) */
+/** Check if a part is a tool call (not result) */
 function isToolCall(part: RuntimePart): boolean {
-  if (part.type !== "tool-invocation") return false
-  const ti = (part as ToolInvocationPart).toolInvocation
-  return ti?.state === "call" || ti?.state === "partial-call"
+  // Primary: OpenCode runtime ToolInvocationPart format
+  if (part.type === "tool-invocation") {
+    const state = (part as ToolInvocationPart).toolInvocation?.state
+    return state === "call" || state === "partial-call"
+  }
+  const p = part as Record<string, unknown>
+  // SDK format: callID + state
+  if (typeof p.callID === "string") {
+    return (
+      p.state === "running" || p.state === "call" || p.state === "partial-call"
+    )
+  }
+  // Legacy OpenAI format: tool_call_id → this is a call
+  // (avoid false-positives when both tool_call_id + tool_use_id exist)
+  if (typeof p.tool_call_id === "string") {
+    return typeof p.tool_use_id !== "string"
+  }
+  return false
 }
 
-/** Check if a ToolInvocationPart is a tool result */
+/** Check if a part is a tool result */
 function isToolResult(part: RuntimePart): boolean {
-  if (part.type !== "tool-invocation") return false
-  return (part as ToolInvocationPart).toolInvocation?.state === "result"
+  // Primary: OpenCode runtime ToolInvocationPart format
+  if (part.type === "tool-invocation") {
+    return (part as ToolInvocationPart).toolInvocation?.state === "result"
+  }
+  // Secondary: SDK / legacy format
+  const p = part as Record<string, unknown>
+  return (
+    (typeof p.callID === "string" &&
+      (p.state === "completed" || p.state === "result")) ||
+    typeof p.tool_use_id === "string"
+  )
 }
 
 /**
  * Clean tool call/result pairs: remove orphaned parts from messages.
- * Returns a new array (does not mutate input).
+ * Mutates message.parts in-place during filter, then produces a
+ * shallow copy of the result.  Callers MUST deep-clone input before
+ * passing if they want to preserve the originals.
  */
 function cleanToolPairs(messages: RuntimeMessage[]): RuntimeMessage[] {
   if (messages.length === 0) return messages
@@ -163,14 +189,21 @@ export function trimMessages(
   maxTotal: number,
   preserveFirst: number = 0
 ): RuntimeMessage[] {
+  // Deep-clone input to guarantee purity — cleanToolPairs mutates parts
+  // arrays internally before its final copy step.
+  const working = messages.map(m => ({
+    info: { ...m.info },
+    parts: [...(m.parts ?? [])],
+  }))
+
   // ── Step 0: MIN_TOTAL guard — don't bother trimming short sessions ──
-  if (messages.length <= minTotal) {
-    return cleanToolPairs(messages.slice())
+  if (working.length <= minTotal) {
+    return cleanToolPairs(working)
   }
 
   // ── Step 1: Split — preserve first N messages untouched ──
-  const prefix = messages.slice(0, preserveFirst)
-  let rest = messages.slice(preserveFirst)
+  const prefix = working.slice(0, preserveFirst)
+  let rest = working.slice(preserveFirst)
 
   // ── Step 2: Per-role independent cap on rest only ──
   let userCount = 0, assistantCount = 0, toolCount = 0
