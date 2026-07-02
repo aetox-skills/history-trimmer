@@ -24,13 +24,13 @@ Restart OpenCode → plugins auto-load. No config file, no dependencies, no setu
 
 ## What you save
 
-History grows every call. Without a cap, a 50-call session sends **~100,000 tokens of conversation the model has already seen**. With the trimmer, history stays flat at ~1,500 tok — no matter how long you chat.
+History grows every call. Without a cap, a 50-call session sends **~100,000 tokens of conversation the model has already seen**. With the trimmer, history stays flat at ~3,000 tok — no matter how long you chat.
 
 | | 10 calls | 20 calls | 50 calls |
 |:--|:--:|:--:|:--:|
 | **Without trimmer** — history sent | ~20,000 tok | ~40,000 tok | ~100,000+ tok |
-| **With trimmer** — history sent | **~1,500 tok** | **~1,500 tok** | **~1,500 tok** |
-| **Waste avoided** | **~18,500 tok** | **~38,500 tok** | **~98,500+ tok** |
+| **With trimmer** — history sent | **~3,000 tok** | **~3,000 tok** | **~3,000 tok** |
+| **Waste avoided** | **~17,000 tok** | **~37,000 tok** | **~97,000+ tok** |
 
 That waste is sent **on every call** — it compounds. The trimmer eliminates it in one shot.
 
@@ -84,13 +84,13 @@ This plugin is optimized for that principle: **keep just enough context for the 
 
 | Variable | Default | Description |
 |:---------|:-------:|:------------|
-| `HISTORY_KEEP` | `3` | Number of non-system messages to keep per call |
+| `HISTORY_KEEP` | `6` | Number of non-system messages to keep per call |
 
 ```bash
-export HISTORY_KEEP=6      # Keep 6 instead of 3
+export HISTORY_KEEP=10     # Keep 10 for long agentic sessions
 ```
 
-**3 messages** is enough for most assistant workflows. If you regularly reference deep history, raise it.
+**6 messages** (~2 exchanges) is the default — safe for normal use, including multi-tool calls. Raise it for deep agentic sessions, lower it to 3 if you're aggressively optimizing.
 
 ---
 
