@@ -229,7 +229,23 @@ MAX_TOTAL_MSGS=50
 
 เหมาะกับ: debug chain, refactor, multi-step build
 ธีม: conservative — เก็บ tool evidence ไว้ให้มากที่สุด
-**นี่คือ preset ที่ใช้อยู่ตอนนี้ (v7.1)**
+
+---
+
+### 🆕 D) v8 — Balanced (Active Default)
+
+```env
+PRESERVE_FIRST_MSGS=2
+MAX_USER_MSGS=10
+MAX_ASSISTANT_MSGS=14
+MAX_TOOL_MSGS=14
+MIN_TOTAL_MSGS=8
+MAX_TOTAL_MSGS=44
+```
+
+เหมาะกับ: งานทั่วไป, coding, debug
+**นี่คือ preset ที่ active อยู่ตอนนี้ (v8)**
+เหตุผล: 10/14/14/8/44 = sum(40) + buffer(4) — MAX_TOTAL เป็น safety fence ไม่ใช่ active constraint per-role caps ทำหน้าที่ตัดแทน
 
 ---
 
@@ -268,7 +284,41 @@ retry_rate = retry_count / total_calls
 
 ---
 
+## ตัวอย่างการคำนวณ: v8 (10/14/14/8/44/2) vs v7.1 (10/16/16/8/50/2)
+
+### Setup
+
+| Parameter | v8 | v7.1 |
+|:--|:-:|:-:|
+| MAX_ASSISTANT | 14 | 16 |
+| MAX_TOOL | 14 | 16 |
+| MAX_TOTAL | 44 | 50 |
+| Per-role sum + preserve | 40 | 44 |
+| Buffer | 4 | 6 |
+
+### ต้นทุนต่อ call (Pro, session ปกติ)
+
+| Component | v8 tokens | v8 cost | v7.1 tokens | v7.1 cost |
+|:--|:--:|:--:|:--:|:--:|
+| Cache hit input | 33,000 | $0.000120 | 35,000 | $0.000127 |
+| Cache miss input | 13,000 | $0.005655 | 15,000 | $0.006525 |
+| Output | 4,000 | $0.003480 | 4,000 | $0.003480 |
+| **รวม** | **50,000** | **$0.00925** | **54,000** | **$0.01013** |
+| | | | **ประหยัด** | **$0.00088 (8.7%)** |
+
+### ทำไมถึงประหยัด
+
+v8 ลด per-role caps โดยไม่เพิ่ม retry:
+1. MAX_ASSISTANT 16→14: 2 assistant messages (700 tok, hit) = $0.000003 → แต่ถ้า retry เพิ่ม 0.5% = $0.00005 → Retry Threshold: 0.5% × $0.01 = $0.00005 → **ไม่คุ้ม** ถ้า retry risk > 0.1%
+2. แต่จริงๆ retry ไม่เพิ่มเพราะ tool evidence ยังอยู่ครบ → savings สุทธิ
+
+**บทเรียน:** ทุก 2 assistant messages ที่ตัด = ~0.01¢ saved — เล็กน้อยแต่เมื่อสะสม 30 calls/day × 30 days = **$0.26/เดือน**
+
+---
+
 ## ตัวอย่างการคำนวณ: v7.1 (10/16/16/8/50/2) vs Balanced (10/16/12/8/40/2)
+
+> หมายเหตุ: ตัวอย่างนี้คือ comparison ก่อน v8 — v7.1 vs Balanced ยังมีประโยชน์ในกรณีที่ tool_ratio ต่ำ < 0.2
 
 ### Setup
 

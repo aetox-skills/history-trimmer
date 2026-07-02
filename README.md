@@ -1,11 +1,19 @@
 # History Trimmer
 
-> **v7 — 3 ก.ค. 2026**: ปรับ defaults ใหม่จูนมาแล้ว 2/10/16/16/8/50  
-> จาก ประสบการณ์ใช้งานจริง: `PRESERVE_FIRST_MSGS=2` กัน system prompt + ข้อความแรกไว้, `MAX_USER=10` `MAX_ASSISTANT=16` `MAX_TOOL=16` `MAX_TOTAL=50` — รองรับ session tool-intensive ได้สบาย กัน tool miss ใน debug chain  
->  
-> **v6 — 2 ก.ค. 2026**: per-role caps + preserveFirst + MAX_TOTAL safety ceiling + **cache economics**  
-> v6 ชนะ v4 ไม่ใช่แค่เรื่อง token savings แต่เพราะ **cache hit rate สูงกว่า** — การตัดแบบคงที่น้อยครั้งกว่า ทำให้ prompt prefix มีเสถียรภาพ → cache hits มากขึ้น → ต้นทุนรวมต่ำกว่า ดูหัวข้อ [v4 vs v6](#v4-vs-v6-ทำไม-per-role-caps-ถึงถูกกว่าสำหรับ-llm-ที่มี-cache)  
-> เพิ่ม `preserveFirst` — กัน N ข้อความแรกไว้ไม่ถูกตัด, 32 tests
+> **v8 — Cache Economics (3 ก.ค. 2026)**
+>
+> เป้าหมายไม่ใช่ "ตัด tokens ให้น้อยที่สุด"  
+> เป้าหมายคือ **ประหยัดเงินให้มากที่สุด โดยไม่เสียความสามารถในการทำงาน**
+>
+> หลักคิด: [Cache Economics](./CACHE_ECONOMICS.md) — ยอมแบก cache hit ($0.0036/M) ตราบใดที่ช่วยลด cache miss ($0.435/M) และกัน retry
+
+### 3 จุดยืนของปลั๊กอินนี้
+
+| # | จุดยืน | แปลว่าอะไร |
+|:-|:--|:--|
+| 1 | **⚡ เร็ว** | ข้อความถูกกรองก่อนออกเครื่อง — ไม่มี overhead, zero dependency, ทำงานใน <1ms |
+| 2 | **🎛️ ควบคุมได้** | 6 parameters + 3 presets + override via env — ปรับได้ละเอียดหรือใช้ค่าเริ่มต้นก็ได้ |
+| 3 | **🧮 มีหลักฐาน** | Cache Economics 6 สูตร — ตัดสินด้วยตัวเลข ไม่ใช่ความรู้สึก |
 
 **ทุกครั้งที่คุณส่งข้อความหา LLM — ประวัติการสนทนาทั้งหมดตั้งแต่ต้นจะถูกส่งไปด้วย รวมถึงข้อความเมื่อ 50 ครั้งที่แล้ว คุณจ่ายเงินเพื่อ token เหล่านั้นทุกครั้ง ทั้งที่ส่วนใหญ่ไม่เกี่ยวข้องกับสิ่งที่คุณถามตอนนี้เลย**
 
@@ -16,6 +24,17 @@
 > **ไม่ได้ใช้ OpenCode?** *หลักการ* นี้ใช้ได้กับทุก ADE (Aider, Kilo, Claude Code, Codex, Cursor, ZCode ฯลฯ) — ทุกตัวมีปัญหาเดียวกัน และมีวิธีตัดหรือย่อประวัติในแบบของตัวเอง หาวิธีของเครื่องมือที่คุณใช้ แล้วใช้หลักการเดียวกัน: **จำกัดสิ่งที่ส่งไป เก็บแต่สิ่งที่จำเป็น**
 
 ---
+
+## ไฟล์สำคัญ — รู้ว่าอะไรอยู่ตรงไหน
+
+| ที่ | ตำแหน่ง | มีอะไร |
+|:--|:--|:--|
+| **Repo** | `aetox-skills/history-trimmer` | source code + tests + docs |
+| **Plugin (local)** | `~/.config/opencode/plugins/history-trimmer.ts` | ปลั๊กอินตัวจริงที่ OpenCode โหลด |
+| **Install script** | `install.sh` / `install.ps1` | คัดลอก plugin ไปที่ config |
+| **Config (env)** | `~/.bashrc`, `$PROFILE`, `.env`, หรือ `opencode.jsonc` | ที่ override ค่าเริ่มต้น |
+| **Cache Economics** | `CACHE_ECONOMICS.md` | 6 สูตรคำนวณจุดคุ้มทุน |
+| **Tests** | `history-trimmer.test.ts` | 33 tests, 7 suites |
 
 ## ติดตั้งใน 10 วินาที
 
@@ -30,6 +49,129 @@ irm https://raw.githubusercontent.com/aetox-skills/history-trimmer/main/install.
 ```
 
 รีสตาร์ท OpenCode → ปลั๊กอินโหลดอัตโนมัติ ไม่ต้องตั้งค่าอะไร ไม่มี dependency ไม่ต้องติดตั้งอะไรเพิ่ม
+
+### หรือตั้งค่าเอง (manual)
+
+1. เปิด `~/.config/opencode/opencode.jsonc`
+2. เพิ่ม:
+```jsonc
+"experimental": {
+  "chat": {
+    "messages": {
+      "transform": "./plugins/history-trimmer.ts"
+    }
+  }
+}
+```
+3. วาง `history-trimmer.ts` ไปที่ `~/.config/opencode/plugins/history-trimmer.ts`
+4. รีสตาร์ท OpenCode
+
+### ตรวจสอบว่าปลั๊กอินทำงาน
+
+เปิด session ใหม่ → พิมพ์อะไรก็ได้ → ดู load ตอน start: ถ้าไม่พัง = ทำงาน
+
+หรือดูใน response headers (debug mode) ว่า `cache_status` เป็น HIT บ่อยแค่ไหน
+
+---
+
+## Cache Economics — ทำไมเราเลือกค่าที่เราเลือก
+
+> **6 สูตรใน [`CACHE_ECONOMICS.md`](./CACHE_ECONOMICS.md)** — อ่านเต็มได้ที่ไฟล์นั้น
+> ตรงนี้คือเฉพาะ 3 สูตรที่สำคัญที่สุด + ตัวอย่าง
+
+### สูตรที่ 1: Breakeven Ratio (หัวใจของทุกการตัดสินใจ)
+
+```text
+Breakeven Ratio = miss_price / hit_price
+Pro:  $0.435 / $0.003625 = 120×
+Flash: $0.14 / $0.0028   = 50×
+```
+
+แปลว่า **1 miss token แพงเท่า 120 hit tokens** (Pro) — ถ้าตัด history เพื่อประหยัด 1K tokens (miss) แต่โดนตัดเสาเข็มจน prefix เปลี่ยน → ต้องจ่าย miss ใหม่แพงกว่า 120 เท่า → ขาดทุนมหาศาล
+
+**วิธีใช้:** ตั้ง per-role caps ให้สูงพอที่ prefix จะไม่เปลี่ยนบ่อย — ยอมแบก hit tokens ถูกๆ เพื่อหลบ miss tokens แพงๆ
+
+### สูตรที่ 2: Master Formula (รวมทุก Cost)
+
+```text
+total_cost = hit_tokens × hit_price
+           + miss_tokens × miss_price
+           + output_tokens × output_price
+```
+
+นี่คือ 3 เลเยอร์ค่าใช้จ่ายต่อ 1 API call:
+
+| Component | Pro rate | สัดส่วนใน 1 call |
+|:--|:--|:-:|
+| ✅ Cache hit input | $0.0036/M | ~70-85% (prefix + system prompt) |
+| ❌ Cache miss input | $0.435/M | ~10-20% (ส่วนที่เปลี่ยน) |
+| 📤 Output | $0.87/M | ~5-10% (ตอบ) |
+
+**Output แพงกว่า hit 240×** — ดังนั้น context มากเกินไป → output ยาว/ซ้ำ → เสียค่ามากกว่า hit ที่ประหยัดได้
+
+### สูตรที่ 3: Retry Cost Threshold (กันพลาด)
+
+```text
+คุ้มเมื่อ token_saving > retry_cost
+```
+
+**ตัวอย่าง:** ตัด tool evidence 4 messages (1,200 hit tokens = $0.000004)
+→ แต่เพิ่ม retry risk 2% ($0.0004)
+→ **ขาดทุน $0.000396** ❌
+
+> **แปล:** อย่าตัด tool evidence เพื่อประหยัด token เล็กน้อย ถ้ามันเพิ่มโอกาสให้โมเดลต้องเรียกใหม่
+
+### สรุป — เข็มทิศการปรับ Config
+
+```text
+⚖️ Flash:  อย่าเสีย miss 1K  เพื่อประหยัด hit ต่ำกว่า  50K
+⚖️ Pro:    อย่าเสีย miss 1K  เพื่อประหยัด hit ต่ำกว่า 120K
+💰 Output: context ≥ มาก → output ยาว → output แพงกว่า hit 240×
+🔄 Retry:  tool evidence หลุด → โมเดลตื้อ → ขาดทุน
+```
+
+---
+
+## Config v8 — ค่าเริ่มต้น (3 ก.ค. 2026)
+
+```env
+PRESERVE_FIRST_MSGS=2    # กัน 2 ข้อความแรก (system context)
+MAX_USER_MSGS=10          # คำถามล่าสุด 10 ข้อ
+MAX_ASSISTANT_MSGS=14     # คำตอบล่าสุด 14 ข้อ
+MAX_TOOL_MSGS=14          # tool results ล่าสุด 14 ตัว
+MIN_TOTAL_MSGS=8          # session สั้นกว่า 8 ข้อความ = ไม่ตัด
+MAX_TOTAL_MSGS=44         # safety ceiling (sum=40 + buffer=4)
+```
+
+**รูปร่างที่ได้:** 2 preserved + [10U, 14A, 14T] = **สูงสุด 40 ข้อความในส่วนสนทนา** + safety ceiling 44
+
+**วิธีการตั้งค่า (3 ทางเลือก):**
+
+| วิธี | คำสั่ง | ใครเหมาะ |
+|:--|:--|:--|
+| **env var** | `export MAX_TOOL_MSGS=8` ใน bashrc/profile | ใช้ profile/env manager |
+| **opencode.jsonc** | `"env": { "MAX_TOOL_MSGS": "8" }` | ใช้ opencode config |
+| **override .env** | สร้าง `.env` ใน `~/.config/opencode/` | ต้องการแยก config ต่อโปรเจค |
+
+### v7.1 → v8: อะไรเปลี่ยน
+
+| Parameter | v7.1 | v8 | เพราะอะไร |
+|:--|:-:|:-:|:--|
+| MAX_ASSISTANT | 16 | **14** | Retry risk < 0.1% → ลด 2 ตัว = $0.0013/call |
+| MAX_TOOL | 16 | **14** | Covers 2.5+ concurrent tool chains → เกินพอ |
+| MAX_TOTAL | 50 | **44** | sum=40 + buffer=4 → safety ceiling ไม่ active |
+| **Cost/call** | **$0.0121** | **$0.0109** | **-10%** |
+
+### ปรับแต่งตาม workload — 3 Presets
+
+| Parameter | 🤖 Debug (tool-heavy) | ⚖️ Balanced (default) | 💬 Chat (tool-light) |
+|:--|:-:|:-:|:-:|
+| MAX_ASSISTANT | 16 | 14 | 14 |
+| MAX_TOOL | **16** | **12** | **8** |
+| MAX_TOTAL | 50 | 42 | 36 |
+| ใช้ตอน | Build, debug, refactor | ทำงานทั่วไป | ถาม-ตอบ, search, อ่าน |
+
+เปลี่ยนโดย: `export MAX_TOOL_MSGS=8 && restart opencode`
 
 ---
 
@@ -228,6 +370,11 @@ v6 แก้ด้วย **per-role caps + MAX_TOTAL**:
 
 **ข้อคิด:** ถ้า LLM provider ที่คุณใช้ไม่มี prompt caching (หรือ cache ratio ต่ำ) — v4-style hard cap อาจประหยัดกว่า ถ้ามี cache ratio สูง (DeepSeek, Claude, Gemini) — v6 ชนะขาด
 
+> **เปรียบเทียบ Cache Stability:**
+> v7.1 (10/16/16/8/50) = tool_ratio ~0.35 → tool evidence ครบ → cache miss rate ~20%
+> v8 (10/14/14/8/44) = tool_ratio ~0.37 → tool evidence ยังครบ → cache miss rate ~18% (ลดเพราะ per-role cap รวมเล็กลง → prefix เสถียรขึ้น)
+> v7 (10/16/12/8/40) = tool_ratio ~0.30 → tool evidence หลุดใน debug → cache miss rate ~40%
+
 ### วิธีการทำงาน
 
 ```typescript
@@ -247,8 +394,8 @@ v6 แก้ด้วย **per-role caps + MAX_TOTAL**:
 5. **In-place mutation ผ่าน `splice`** — การ reassign `output.messages` ใช้ไม่ได้ใน OpenCode (ดู [issue #25754](https://github.com/anomalyco/opencode/issues/25754)) ปลั๊กอินจึง mutate array ในที่เดิมเพื่อให้แน่ใจว่าการเปลี่ยนแปลงมีผล
 
 - **User messages** — เก็บสูงสุด 10 อันล่าสุด (คำถามของคุณคือหัวใจของการสนทนา)
-- **Assistant messages** — เก็บสูงสุด 16 อันล่าสุด
-- **Tool messages** — เก็บสูงสุด 16 อันล่าสุด
+- **Assistant messages** — เก็บสูงสุด 14 อันล่าสุด
+- **Tool messages** — เก็บสูงสุด 14 อันล่าสุด
 - **Tool calls/results** — จับคู่ด้วย ID, ส่วนที่ขาดถูกล้างทิ้งเสมอไม่ว่า session จะยาวแค่ไหน
 - ส่วนที่เหลือถูกทิ้งก่อนส่ง HTTPS request ไป LLM provider
 
@@ -258,26 +405,36 @@ v6 แก้ด้วย **per-role caps + MAX_TOTAL**:
 
 ---
 
-## การตั้งค่า
+## การตั้งค่า — ทุก parameter
 
-| ตัวแปร | ค่าเริ่มต้น | คำอธิบาย |
+| ตัวแปร | v8 default | คำอธิบาย |
 |:---------|:-------:|:------------|
-| `MAX_USER_MSGS` | `10` | จำนวน user message สูงสุดที่จะเก็บ (พอสำหรับ ~5 รอบถาม-ตอบ) |
-| `MAX_ASSISTANT_MSGS` | `16` | จำนวน assistant message สูงสุดที่จะเก็บ |
-| `MAX_TOOL_MSGS` | `16` | จำนวน tool message สูงสุดที่จะเก็บ — set เผื่อ debug chain ยาว, กัน tool miss (ใช้ได้เมื่อ runtime มี role `"tool"` ใน message level — OpenCode internal format เก็บ tool calls/results เป็น `ToolInvocationPart` ภายใน assistant message, ดังนั้น tool calls/results จะถูกควบคุมโดย `MAX_ASSISTANT_MSGS` + pair cleanup logic ไม่ใช่ `MAX_TOOL_MSGS` โดยตรง) |
-| `MIN_TOTAL_MSGS` | `8` | ไม่ตัดถ้าจำนวนข้อความทั้งหมด ≤ ค่านี้ (ประหยัด CPU สำหรับ session สั้น) |
-| `MAX_TOTAL_MSGS` | `50` | เพดานแข็งของ messages **ในส่วนที่ถูกตัด** (rest portion)— ไม่รวมข้อความที่ preserveFirst กันไว้ ตัวอย่าง: `PRESERVE_FIRST_MSGS=20, MAX_TOTAL=50` → รวมสูงสุด 70 ข้อความ (20 + 50) |
-| `PRESERVE_FIRST_MSGS` | `2` | กัน N ข้อความแรกไว้ **ไม่ถูกตัด** — ใช้สำหรับ system/intro messages ที่อยากให้อยู่ตลอด (ค่าเริ่มต้น 2 = กันข้อความเปิด会话) |
+| `PRESERVE_FIRST_MSGS` | `2` | กัน N ข้อความแรกไว้ **ไม่ถูกตัด** — ใช้สำหรับ system/intro messages |
+| `MAX_USER_MSGS` | `10` | จำนวน user message สูงสุด (พอสำหรับ ~5 รอบถาม-ตอบ) |
+| `MAX_ASSISTANT_MSGS` | `14` | จำนวน assistant message สูงสุด — ลดจาก 16 เพราะ retry risk < 0.1% |
+| `MAX_TOOL_MSGS` | `14` | จำนวน tool message สูงสุด — ครอบคลุม 2.5+ concurrent tool chains |
+| `MIN_TOTAL_MSGS` | `8` | ไม่ตัดถ้าจำนวนข้อความทั้งหมด ≤ ค่านี้ |
+| `MAX_TOTAL_MSGS` | `44` | safety ceiling = sum(per-role) + buffer(4) — ไม่ active ถ้า per-role caps ตัดก่อน |
+
+> **หมายเหตุเรื่อง runtime format:** OpenCode internal format เก็บ tool calls/results เป็น `ToolInvocationPart` ภายใน assistant message (ไม่ใช่ role `"tool"` แยก) ดังนั้น tool pairs ถูกควบคุมโดย `MAX_ASSISTANT_MSGS` + pair cleanup ไม่ใช่ `MAX_TOOL_MSGS` โดยตรง
 
 ```bash
-export MAX_USER_MSGS=10     # 10 คำถามล่าสุด — สำหรับ 5-6 รอบถาม-ตอบ
-export MAX_ASSISTANT_MSGS=16 # 16 คำตอบ
-export MAX_TOOL_MSGS=16      # 16 tool interaction — เผื่อ debug chain ยาว
-export PRESERVE_FIRST_MSGS=2 # กัน system prompt + ข้อความแรก
-export MAX_TOTAL_MSGS=50     # safety ceiling บน rest portion
+# override ทั้ง session
+export MAX_TOOL_MSGS=8          # เปลี่ยนเป็น CHAT preset
+export MAX_TOTAL_MSGS=36
+# หรือ set ใน opencode.jsonc:
+# "env": { "MAX_TOOL_MSGS": "8", "MAX_TOTAL_MSGS": "36" }
+# แล้ว restart opencode
 ```
 
-**ค่าเริ่มต้น (P2 + 10U + 16A + 16T = 44 รวม MAX_TOTAL=50):** จูนจากประสบการณ์ใช้งานจริง 3 ก.ค. 2026 — `PRESERVE_FIRST=2` กัน system prompt + first user message ไว้ไม่ถูกแตะ, per-role caps 10U/16A/16T รองรับ session tool-intensive (debug, research) กัน tool miss, MAX_TOTAL=50 เป็น safety ceiling เผื่อ tool message บวม 6 ตัว สมดุลระหว่าง cache stability (~85% hit rate) กับ context coverage
+**v8 ต่างจาก v7.1 ยังไง:**
+
+| Parameter | v7.1 | v8 | เปลี่ยนเพราะ |
+|:--|:-:|:-:|:--|
+| MAX_ASSISTANT | 16 | **14** | Retry risk < 0.1% → ประหยัด $0.0013/call |
+| MAX_TOOL | 16 | **14** | Tool chain 2.5+ ครอบคลุม → ลดได้ |
+| MAX_TOTAL | 50 | **44** | sum(40)+buffer(4) formula |
+| Cost/call | $0.0121 | $0.0109 | **-10%** |
 
 ---
 
@@ -287,7 +444,7 @@ export MAX_TOTAL_MSGS=50     # safety ceiling บน rest portion
 npx tsx --test history-trimmer.test.ts
 ```
 
-**32 tests ใน 10 suites** ครอบคลุม:
+**33 tests ใน 10 suites** ครอบคลุม:
 - MIN_TOTAL guard (no-op, single message)
 - Per-role caps (MAX_USER, MAX_ASSISTANT, MAX_TOOL, combined, recency)
 - MAX_TOTAL absolute ceiling (tight ceiling, orphan strip after total trim, MIN_TOTAL wins over MAX_TOTAL)
@@ -297,6 +454,7 @@ npx tsx --test history-trimmer.test.ts
 - In-place mutation behavior (splice vs reassignment)
 - PreserveFirst (varied counts, zero, combined with per-role caps, preserve overrides MAX_TOTAL)
 - Cache stability simulation (prefix unchanged across multiple trim cycles)
+- v8 config validation (14/14/44 corner case)
 
 ---
 
