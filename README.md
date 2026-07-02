@@ -75,7 +75,8 @@ This plugin is optimized for that principle: **keep just enough context for the 
 ```
 
 - **System messages** (instructions, context) — always kept
-- **Non-system messages** (user, assistant, tool results) — only the last N are kept
+- **User messages** — keeps up to 3 most recent (your questions are the conversation)
+- **Assistant + tool messages** — kept alongside their user message, but trimmed first if total exceeds cap
 - The rest are discarded before the HTTPS request to the LLM provider
 
 ---
@@ -84,13 +85,15 @@ This plugin is optimized for that principle: **keep just enough context for the 
 
 | Variable | Default | Description |
 |:---------|:-------:|:------------|
-| `HISTORY_KEEP` | `6` | Number of non-system messages to keep per call |
+| `MAX_USER_MSGS` | `3` | Max user messages to keep (your questions are prioritized) |
+| `HISTORY_KEEP` | `6` | Hard cap on total non-system messages |
 
 ```bash
-export HISTORY_KEEP=10     # Keep 10 for long agentic sessions
+export MAX_USER_MSGS=5     # Keep 5 user questions instead of 3
+export HISTORY_KEEP=10     # Raise hard cap for long agentic sessions
 ```
 
-**6 messages** (~2 exchanges) is the default — safe for normal use, including multi-tool calls. Raise it for deep agentic sessions, lower it to 3 if you're aggressively optimizing.
+**Default (3 user + 6 total):** keeps your last 3 questions + their responses. Tool-heavy exchanges that exceed 6 total slots will trim assistant/tool messages before user messages — your questions are never the first to go.
 
 ---
 
