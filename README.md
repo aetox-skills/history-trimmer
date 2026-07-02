@@ -15,13 +15,13 @@ This plugin solves that for **OpenCode** by hooking into `experimental.chat.mess
 ## Install in 10 seconds
 
 ```bash
-# Copy 1 file, restart OpenCode. Done.
-cp history-trimmer.ts ~/.config/opencode/plugins/
+# Linux / macOS (bash)
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/aetox-skills/history-trimmer/main/install.sh)"
 ```
 
-**Windows:**
 ```powershell
-Copy-Item history-trimmer.ts "$env:USERPROFILE\.config\opencode\plugins\"
+# Windows (PowerShell 5+) / cross-platform pwsh
+irm https://raw.githubusercontent.com/aetox-skills/history-trimmer/main/install.ps1 | iex
 ```
 
 Restart OpenCode → plugins auto-load. No config file, no dependencies, no setup.
