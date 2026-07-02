@@ -90,15 +90,15 @@ This plugin is optimized for that principle: **keep just enough context for the 
 
 | Variable | Default | Description |
 |:---------|:-------:|:------------|
-| `MAX_USER_MSGS` | `3` | Max user messages to keep (your questions are prioritized) |
-| `HISTORY_KEEP` | `6` | Hard cap on total non-system messages |
+| `MAX_USER_MSGS` | `5` | Max user messages to keep (your questions are prioritized) |
+| `HISTORY_KEEP` | `10` | Hard cap on total non-system messages |
 
 ```bash
-export MAX_USER_MSGS=5     # Keep 5 user questions instead of 3
-export HISTORY_KEEP=10     # Raise hard cap for long agentic sessions
+export MAX_USER_MSGS=8     # Keep 8 user questions instead of 5
+export HISTORY_KEEP=15     # Raise hard cap for deep agentic sessions
 ```
 
-**Default (3 user + 6 total):** keeps your last 3 questions + their responses. Tool-heavy exchanges that exceed 6 total slots will trim assistant/tool messages before user messages — your questions are never the first to go.
+**Default (5 user + 10 total):** keeps your last 5 questions + their responses. Enough context for natural back-and-forth while still saving ~97% vs uncapped history.
 
 ---
 

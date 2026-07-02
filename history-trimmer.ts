@@ -1,10 +1,10 @@
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const HistoryTrimmerPlugin: Plugin = async () => {
-  // Keep up to 3 user messages (prioritized), hard cap at 6 total
-  // Override via env: MAX_USER_MSGS=5, HISTORY_KEEP=10
-  const MAX_USER = parseInt(process.env.MAX_USER_MSGS ?? "3", 10)
-  const HARD_CAP = parseInt(process.env.HISTORY_KEEP ?? "6", 10)
+  // Keep up to 5 user messages (prioritized), hard cap at 10 total
+  // Override via env: MAX_USER_MSGS=10, HISTORY_KEEP=15
+  const MAX_USER = parseInt(process.env.MAX_USER_MSGS ?? "5", 10)
+  const HARD_CAP = parseInt(process.env.HISTORY_KEEP ?? "10", 10)
 
   return {
     "experimental.chat.messages.transform": async (_input, output) => {
