@@ -26,6 +26,19 @@ Restart OpenCode → plugins auto-load. No config file, no dependencies, no setu
 
 ---
 
+## When not to use this
+
+History trimming trades deep context for token savings. **In most forward-moving conversations this is a free optimization.** But there are cases where it can hurt:
+
+- **Long architectural planning sessions** — where the model needs to reference constraints discussed 20 messages ago
+- **Debug sessions relying on old error logs or tool outputs** — each call builds on the last
+- **Agent workflows where previous tool results are still referenced** — if the agent says "as we saw earlier"
+- **Legal / medical / financial workflows** — where full trace context is required
+
+For these cases, raise `HISTORY_KEEP` (or disable the plugin entirely) and accept the higher token cost. The trade-off is controlled, not zero.
+
+---
+
 ## What you save
 
 History grows every call. Without a cap, a 50-call session sends **~100,000 tokens of conversation the model has already seen**. With the trimmer, history stays flat at ~3,000 tok — no matter how long you chat.
@@ -41,6 +54,8 @@ That waste is sent **on every call** — it compounds. The trimmer eliminates it
 ### Savings by model
 
 Pricing as of **2 Jul 2026** (cache-miss input). Multiply by your session volume.
+
+> **Assumptions:** savings are estimated from cache-miss input rate only. Does not include output tokens, provider cache behavior, or variable pricing. These are **illustrative minimums** — actual savings depend on your model, cache hit rate, and session length.
 
 | Model | Price /M tok | 10 calls | 20 calls | Session (~100K) | **Month** |
 |:--|:--:|:--:|:--:|:--:|:--:|
