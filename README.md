@@ -81,6 +81,7 @@ This plugin is optimized for that principle: **keep just enough context for the 
 - **System messages** (instructions, context) — always kept
 - **User messages** — keeps up to 3 most recent (your questions are the conversation)
 - **Assistant + tool messages** — kept alongside their user message, but trimmed first if total exceeds cap
+- **Tool call/result integrity** — ensures no pair gets split. If a tool_call is kept, its tool_result is included. Orphaned tool_results at the cut boundary are removed, preventing API errors.
 - The rest are discarded before the HTTPS request to the LLM provider
 
 ---
