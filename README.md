@@ -1,8 +1,12 @@
-# OpenCode History Trimmer Plugin
+# History Trimmer
 
-Every time you hit enter, your entire conversation history — including messages from 50 exchanges ago — gets packed up and sent to the API. **You pay for every single one of those tokens.** Most of them are irrelevant to what you're asking right now.
+**Every API call to an LLM carries your entire conversation history — including messages from 50 exchanges ago. You pay for every one of those tokens. Most of them are irrelevant to what you're asking right now.**
 
-This plugin caps history at **N messages per call** — the rest are discarded before the request leaves your machine. Zero impact on quality. Immediate token savings.
+This is not an OpenCode problem. This is not a Claude Code problem. This is not a Codex problem. **This is how every API-based LLM works** — the full history goes with every request. The bigger the model, the more expensive the waste.
+
+This plugin solves that at the root: **cap history at N messages per call, discard the rest before the request leaves your machine.** Works on any system that calls an LLM API. Zero impact on quality. Immediate token savings.
+
+> OpenCode users: copy to `plugins/` and restart. Everyone else: adapt the same principle — the hook is `experimental.chat.messages.transform`, the idea is universal.
 
 ---
 
