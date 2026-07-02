@@ -34,6 +34,7 @@
 | **Install script** | `install.sh` / `install.ps1` | คัดลอก plugin ไปที่ config |
 | **Config (env)** | `~/.bashrc`, `$PROFILE`, `.env`, หรือ `opencode.jsonc` | ที่ override ค่าเริ่มต้น |
 | **Cache Economics** | `CACHE_ECONOMICS.md` | 6 สูตรคำนวณจุดคุ้มทุน |
+| **Model-Adaptive** | `MODEL_ADAPTIVE.md` | สูตรปรับ config ตาม breakeven ratio ของแต่ละโมเดล |
 | **Tests** | `history-trimmer.test.ts` | 33 tests, 7 suites |
 
 ## ติดตั้งใน 10 วินาที
@@ -90,6 +91,8 @@ Flash: $0.14 / $0.0028   = 50×
 แปลว่า **1 miss token แพงเท่า 120 hit tokens** (Pro) — ถ้าตัด history เพื่อประหยัด 1K tokens (miss) แต่โดนตัดเสาเข็มจน prefix เปลี่ยน → ต้องจ่าย miss ใหม่แพงกว่า 120 เท่า → ขาดทุนมหาศาล
 
 **วิธีใช้:** ตั้ง per-role caps ให้สูงพอที่ prefix จะไม่เปลี่ยนบ่อย — ยอมแบก hit tokens ถูกๆ เพื่อหลบ miss tokens แพงๆ
+
+> Breakeven ratio แตกต่างตามโมเดล — ดูการปรับค่าใน [`MODEL_ADAPTIVE.md`](./MODEL_ADAPTIVE.md)
 
 ### สูตรที่ 2: Master Formula (รวมทุก Cost)
 
@@ -406,6 +409,9 @@ v6 แก้ด้วย **per-role caps + MAX_TOTAL**:
 ---
 
 ## การตั้งค่า — ทุก parameter
+
+> 💡 **ค่า default ด้านล่างคือสำหรับ DeepSeek V4 Pro (R=120×)**  
+> ถ้าใช้โมเดลอื่น → ดู [`MODEL_ADAPTIVE.md`](./MODEL_ADAPTIVE.md) สำหรับสูตรปรับค่า
 
 | ตัวแปร | v8 default | คำอธิบาย |
 |:---------|:-------:|:------------|
