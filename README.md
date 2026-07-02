@@ -4,9 +4,9 @@
 
 This is not an OpenCode problem. This is not a Claude Code problem. This is not a Codex problem. **This is how every API-based LLM works** — the full history goes with every request. The bigger the model, the more expensive the waste.
 
-This plugin solves that at the root: **cap history at N messages per call, discard the rest before the request leaves your machine.** Works on any system that calls an LLM API. Zero impact on quality. Immediate token savings.
+This plugin solves that for **OpenCode** by hooking into `experimental.chat.messages.transform` — it caps history at N messages per call before the request leaves your machine. Zero impact on quality. Immediate token savings.
 
-> OpenCode users: copy to `plugins/` and restart. Everyone else: adapt the same principle — the hook is `experimental.chat.messages.transform`, the idea is universal.
+> **Not on OpenCode?** The *principle* is universal. Find your ADE's equivalent of the messages transform hook and apply the same logic. For Claude Code: use `compact` or `/compact`. For Codex: lower `message_limit`. The idea is the same — cap what you send.
 
 ---
 
