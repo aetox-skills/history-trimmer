@@ -44,36 +44,80 @@ export const HistoryTrimmerPlugin: Plugin = async () => {
         trimmed.shift()
       }
 
-      // --- Step 3: Validate tool_call/tool_result pairs by counting per assistant ---
-      // For each assistant message, check that ALL its tool results made it into the slice.
-      // If any are missing, remove the assistant *and* whatever tool results survived.
+      // --- Step 3: Validate tool_call/tool_result pairs by ID ---
+      // Collect all tool_call IDs from kept assistant messages
+      const toolCallIds = new Set<string>()
+      for (const m of trimmed) {
+        if (m.info.role !== "assistant") continue
+        for (const p of (m.parts ?? [])) {
+          const part = p as Record<string, unknown>
+          const id = part.id ?? part.tool_call_id
+          if (typeof id === "string") toolCallIds.add(id)
+        }
+      }
+
+      // Collect all tool_result IDs from kept tool messages
+      const toolResultIds = new Set<string>()
+      for (const m of trimmed) {
+        if (m.info.role !== "tool") continue
+        for (const p of (m.parts ?? [])) {
+          const part = p as Record<string, unknown>
+          const id = part.tool_use_id ?? part.tool_call_id
+          if (typeof id === "string") toolResultIds.add(id)
+        }
+      }
+
+      // Remove assistant messages whose tool_call IDs are not all satisfied
       let i = trimmed.length - 1
       while (i >= 0) {
         if (trimmed[i].info.role === "assistant") {
-          const origIdx = conversation.indexOf(trimmed[i])
-
-          // Count tool messages that follow this assistant in the original array
-          let origToolCount = 0
-          for (let j = origIdx + 1; j < conversation.length && conversation[j].info.role === "tool"; j++) {
-            origToolCount++
+          const ids = new Set<string>()
+          for (const p of (trimmed[i].parts ?? [])) {
+            const part = p as Record<string, unknown>
+            const id = part.id ?? part.tool_call_id
+            if (typeof id === "string") ids.add(id)
           }
-
-          if (origToolCount > 0) {
-            // Count tool messages that survived in our trimmed slice
-            let keptToolCount = 0
-            for (let j = i + 1; j < trimmed.length && trimmed[j].info.role === "tool"; j++) {
-              keptToolCount++
+          // If any tool_call ID is missing its result, remove this assistant + its tools
+          let missing = false
+          for (const id of ids) {
+            if (!toolResultIds.has(id)) { missing = true; break }
+          }
+          if (missing) {
+            // Remove assistant + any tool messages that follow it
+            let removeCount = 1
+            while (i + removeCount < trimmed.length && trimmed[i + removeCount].info.role === "tool") {
+              // Also remove their IDs from the result set
+              for (const p of (trimmed[i + removeCount].parts ?? [])) {
+                const part = p as Record<string, unknown>
+                const id = part.tool_use_id ?? part.tool_call_id
+                if (typeof id === "string") toolResultIds.delete(id)
+              }
+              removeCount++
             }
-
-            if (keptToolCount < origToolCount) {
-              // Not all tool results made it → unsafe to keep this assistant
-              trimmed.splice(i, 1 + keptToolCount)
-              i = Math.min(i, trimmed.length - 1)
-              continue
-            }
+            trimmed.splice(i, removeCount)
+            i = Math.min(i, trimmed.length - 1)
+            continue
           }
         }
         i--
+      }
+
+      // Remove orphaned tool results (IDs that don't belong to any kept assistant)
+      i = 0
+      while (i < trimmed.length) {
+        if (trimmed[i].info.role === "tool") {
+          let hasMatch = false
+          for (const p of (trimmed[i].parts ?? [])) {
+            const part = p as Record<string, unknown>
+            const id = part.tool_use_id ?? part.tool_call_id
+            if (typeof id === "string" && toolCallIds.has(id)) { hasMatch = true; break }
+          }
+          if (!hasMatch) {
+            trimmed.splice(i, 1)
+            continue
+          }
+        }
+        i++
       }
 
       output.messages = [...system, ...trimmed]

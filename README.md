@@ -4,7 +4,7 @@
 
 This is not an OpenCode problem. This is not a Claude Code problem. This is not a Codex problem. **This is how every API-based LLM works** — the full history goes with every request. The bigger the model, the more expensive the waste.
 
-This plugin solves that for **OpenCode** by hooking into `experimental.chat.messages.transform` — it caps history at N messages per call before the request leaves your machine. Zero impact on quality. Immediate token savings.
+This plugin solves that for **OpenCode** by hooking into `experimental.chat.messages.transform` — it caps history at N messages per call before the request leaves your machine. Immediate token savings.
 
 > **Not on OpenCode?** The *principle* is universal — every ADE (Aider, Kilo, Claude Code, Codex, Cursor, ZCode, and so on) has the same problem and some way to cap or compact history. Find your tool's equivalent and apply the same logic: **limit what you send, keep what matters.**
 
@@ -41,13 +41,13 @@ For these cases, raise `HISTORY_KEEP` (or disable the plugin entirely) and accep
 
 ## What you save
 
-History grows every call. Without a cap, a 50-call session sends **~100,000 tokens of conversation the model has already seen**. With the trimmer, history stays flat at ~3,000 tok — no matter how long you chat.
+History grows every call. Without a cap, a 50-call session sends **~100,000 tokens of conversation the model has already seen**. With the trimmer, history is capped at 10 messages (~5,000 tok) — flat regardless of session length.
 
 | | 10 calls | 20 calls | 50 calls |
 |:--|:--:|:--:|:--:|
 | **Without trimmer** — history sent | ~20,000 tok | ~40,000 tok | ~100,000+ tok |
-| **With trimmer** — history sent | **~3,000 tok** | **~3,000 tok** | **~3,000 tok** |
-| **Waste avoided** | **~17,000 tok** | **~37,000 tok** | **~97,000+ tok** |
+| **With trimmer** — history sent | **~5,000 tok** | **~5,000 tok** | **~5,000 tok** |
+| **Waste avoided** | **~15,000 tok** | **~35,000 tok** | **~95,000+ tok** |
 
 That waste is sent **on every call** — it compounds. The trimmer eliminates it in one shot.
 
@@ -94,7 +94,7 @@ This plugin is optimized for that principle: **keep just enough context for the 
 ```
 
 - **System messages** (instructions, context) — always kept
-- **User messages** — keeps up to 3 most recent (your questions are the conversation)
+- **User messages** — keeps up to 5 most recent (your questions are the conversation)
 - **Assistant + tool messages** — kept alongside their user message, but trimmed first if total exceeds cap
 - **Tool call/result integrity** — ensures no pair gets split. If a tool_call is kept, its tool_result is included. Orphaned tool_results at the cut boundary are removed, preventing API errors.
 - The rest are discarded before the HTTPS request to the LLM provider
